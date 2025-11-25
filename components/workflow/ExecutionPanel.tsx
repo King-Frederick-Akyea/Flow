@@ -1,17 +1,20 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Node, NodeProps } from 'reactflow'
-import { WorkflowGraph } from '@/types/workflow'
+import { Node as ReactFlowNode } from 'reactflow'
+import { WorkflowGraph, NodeData } from '@/types/workflow'
 import { supabase } from '@/lib/supabase'
 import { executionEngine } from '@/lib/executionEngine'
+import { useRouter } from 'next/navigation'
 
 interface ExecutionPanelProps {
-  selectedNode: Node | null
+  selectedNode: ReactFlowNode | null
   workflowId?: string
   onConfigUpdate: (nodeId: string, config: any) => void
   getCurrentGraph: () => WorkflowGraph
   onSave?: (graph: WorkflowGraph) => void
+  name?: string
+  description?: string
 }
 
 export function ExecutionPanel({ 
@@ -19,34 +22,20 @@ export function ExecutionPanel({
   workflowId, 
   onConfigUpdate, 
   getCurrentGraph,
-  onSave 
+  onSave,
+  name,
+  description
 }: ExecutionPanelProps) {
+  const router = useRouter()
   const [isExecuting, setIsExecuting] = useState(false)
   const [executionLog, setExecutionLog] = useState<string[]>([])
 
-  const handleSave = async () => {
-    if (!workflowId) return
-
-    const graph = getCurrentGraph()
-    const { error } = await supabase
-      .from('workflows')
-      .update({ 
-        graph_data: graph,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', workflowId)
-
-    if (error) {
-      console.error('Error saving workflow:', error)
-      alert('Error saving workflow')
-    } else {
-      onSave?.(graph)
-      alert('Workflow saved successfully!')
-    }
-  }
-
   const handleExecute = async () => {
-    if (!workflowId) return
+    if (!workflowId) {
+      setExecutionLog(prev => [...prev, 'Error: Please save the workflow first before executing'])
+      alert('Please save the workflow first before executing')
+      return
+    }
 
     setIsExecuting(true)
     setExecutionLog(['Starting workflow execution...'])
@@ -61,6 +50,11 @@ export function ExecutionPanel({
     } finally {
       setIsExecuting(false)
     }
+  }
+
+  const handleSave = () => {
+    const graph = getCurrentGraph()
+    onSave?.(graph)
   }
 
   const renderNodeConfig = () => {
@@ -80,7 +74,9 @@ export function ExecutionPanel({
     )
   }
 
-  const renderConfigForm = (node: Node) => {
+  const renderConfigForm = (node: ReactFlowNode) => {
+    const nodeData = node.data as NodeData
+
     switch (node.type) {
       case 'trigger':
         return (
@@ -91,9 +87,9 @@ export function ExecutionPanel({
               </label>
               <select 
                 className="w-full p-2 border border-gray-300 rounded"
-                value={node.data.config?.schedule || ''}
+                value={nodeData.config?.schedule || ''}
                 onChange={(e) => onConfigUpdate(node.id, { 
-                  ...node.data.config, 
+                  ...nodeData.config, 
                   schedule: e.target.value 
                 })}
               >
@@ -104,6 +100,23 @@ export function ExecutionPanel({
                 <option value="custom">Custom Cron</option>
               </select>
             </div>
+            {nodeData.config?.schedule === 'custom' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cron Expression
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border border-gray-300 rounded"
+                  placeholder="0 9 * * *"
+                  value={nodeData.config?.cron || ''}
+                  onChange={(e) => onConfigUpdate(node.id, {
+                    ...nodeData.config,
+                    cron: e.target.value
+                  })}
+                />
+              </div>
+            )}
           </div>
         )
       
@@ -116,9 +129,9 @@ export function ExecutionPanel({
               </label>
               <select 
                 className="w-full p-2 border border-gray-300 rounded"
-                value={node.data.config?.source || ''}
+                value={nodeData.config?.source || ''}
                 onChange={(e) => onConfigUpdate(node.id, { 
-                  ...node.data.config, 
+                  ...nodeData.config, 
                   source: e.target.value 
                 })}
               >
@@ -129,6 +142,23 @@ export function ExecutionPanel({
                 <option value="sheets">Google Sheets</option>
               </select>
             </div>
+            {nodeData.config?.source && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Configuration
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border border-gray-300 rounded"
+                  placeholder="Enter configuration..."
+                  value={nodeData.config?.configValue || ''}
+                  onChange={(e) => onConfigUpdate(node.id, {
+                    ...nodeData.config,
+                    configValue: e.target.value
+                  })}
+                />
+              </div>
+            )}
           </div>
         )
       
@@ -141,9 +171,9 @@ export function ExecutionPanel({
               </label>
               <select 
                 className="w-full p-2 border border-gray-300 rounded"
-                value={node.data.config?.action || ''}
+                value={nodeData.config?.action || ''}
                 onChange={(e) => onConfigUpdate(node.id, { 
-                  ...node.data.config, 
+                  ...nodeData.config, 
                   action: e.target.value 
                 })}
               >
@@ -154,6 +184,23 @@ export function ExecutionPanel({
                 <option value="social">Social Media</option>
               </select>
             </div>
+            {nodeData.config?.action && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Details
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border border-gray-300 rounded"
+                  placeholder="Enter action details..."
+                  value={nodeData.config?.actionDetails || ''}
+                  onChange={(e) => onConfigUpdate(node.id, {
+                    ...nodeData.config,
+                    actionDetails: e.target.value
+                  })}
+                />
+              </div>
+            )}
           </div>
         )
       
@@ -179,7 +226,21 @@ export function ExecutionPanel({
       {/* Execution Controls & Logs */}
       <div className="w-1/2 flex flex-col">
         <div className="border-b border-gray-200 p-4 font-semibold flex justify-between items-center">
-          <span>Execution</span>
+          <div className="flex-1 mr-4">
+            {workflowId && (
+              <>
+                <div className="text-sm font-medium text-gray-700 mb-1">Workflow: {name}</div>
+                {description && (
+                  <div className="text-sm text-gray-600">{description}</div>
+                )}
+              </>
+            )}
+            {!workflowId && (
+              <div className="text-sm text-gray-600">
+                Configure your workflow and click Save to get started
+              </div>
+            )}
+          </div>
           <div className="space-x-2">
             <button
               onClick={handleSave}
@@ -189,8 +250,8 @@ export function ExecutionPanel({
             </button>
             <button
               onClick={handleExecute}
-              disabled={isExecuting}
-              className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+              disabled={isExecuting || !workflowId}
+              className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {isExecuting ? 'Running...' : 'Execute'}
             </button>

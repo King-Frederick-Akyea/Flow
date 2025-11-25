@@ -2,8 +2,8 @@
 
 import React, { useCallback, useState, useEffect } from 'react'
 import ReactFlow, {
-  Node,
-  Edge,
+  Node as ReactFlowNode,
+  Edge as ReactFlowEdge,
   addEdge,
   Connection,
   useNodesState,
@@ -14,7 +14,16 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
-import { WorkflowGraph, NodeType } from '@/types/workflow'
+import { 
+  WorkflowGraph, 
+  NodeType, 
+  WorkflowNode, 
+  WorkflowEdge,
+  toReactFlowNode, 
+  fromReactFlowNode,
+  toReactFlowEdge,
+  fromReactFlowEdge
+} from '@/types/workflow'
 import { Sidebar } from './Sidebar'
 import { NodeTypes } from './NodeTypes'
 import { ExecutionPanel } from './ExecutionPanel'
@@ -29,21 +38,27 @@ const nodeTypes = {
 
 interface WorkflowBuilderProps {
   initialGraph?: WorkflowGraph
-  workflowId?: string
+  workflowId?: string 
   onSave?: (graph: WorkflowGraph) => void
+  name?: string
+  description?: string
 }
 
-export function WorkflowBuilder({ initialGraph, workflowId, onSave }: WorkflowBuilderProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialGraph?.nodes || [])
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialGraph?.edges || [])
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
+export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, description }: WorkflowBuilderProps) {
+  // Convert initial graph to React Flow format
+  const initialNodes = initialGraph?.nodes.map(toReactFlowNode) || []
+  const initialEdges = initialGraph?.edges.map(toReactFlowEdge) || []
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [selectedNode, setSelectedNode] = useState<ReactFlowNode | null>(null)
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges],
   )
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: ReactFlowNode) => {
     setSelectedNode(node)
   }, [])
 
@@ -61,7 +76,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave }: WorkflowBu
         y: event.clientY - 100,
       }
 
-      const newNode: Node = {
+      const newNode: ReactFlowNode = {
         id: `${type}-${Date.now()}`,
         type,
         position,
@@ -89,7 +104,13 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave }: WorkflowBu
   }, [setNodes])
 
   const getCurrentGraph = useCallback((): WorkflowGraph => {
-    return { nodes, edges }
+    const workflowNodes: WorkflowNode[] = nodes.map(fromReactFlowNode)
+    const workflowEdges: WorkflowEdge[] = edges.map(fromReactFlowEdge)
+    
+    return { 
+      nodes: workflowNodes, 
+      edges: workflowEdges 
+    }
   }, [nodes, edges])
 
   return (
@@ -111,7 +132,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave }: WorkflowBu
             <Controls />
             <Background />
             <MiniMap 
-              nodeColor={(node) => {
+              nodeColor={(node: ReactFlowNode) => {
                 switch (node.type) {
                   case 'trigger': return '#6EE7B7'
                   case 'dataSource': return '#93C5FD'
@@ -129,6 +150,8 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave }: WorkflowBu
           workflowId={workflowId}
           getCurrentGraph={getCurrentGraph}
           onSave={onSave}
+          name={name}
+          description={description}
         />
       </div>
     </div>

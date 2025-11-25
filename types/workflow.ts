@@ -1,3 +1,5 @@
+import { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
+
 export interface Workflow {
   id: string
   name: string
@@ -6,14 +8,15 @@ export interface Workflow {
   created_at: string
   updated_at: string
   is_active: boolean
+  user_id: string // Add this field
 }
 
 export interface WorkflowGraph {
-  nodes: Node[]
-  edges: Edge[]
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
 }
 
-export interface Node {
+export interface WorkflowNode {
   id: string
   type: NodeType
   position: { x: number; y: number }
@@ -26,7 +29,7 @@ export interface NodeData {
   config?: Record<string, any>
 }
 
-export interface Edge {
+export interface WorkflowEdge {
   id: string
   source: string
   target: string
@@ -47,6 +50,35 @@ export interface WorkflowRun {
   completed_at?: string
   logs: any[]
   error_message?: string
+}
+
+export function toReactFlowNode(node: WorkflowNode): ReactFlowNode {
+  return {
+    ...node,
+  } as ReactFlowNode
+}
+
+export function fromReactFlowNode(node: ReactFlowNode): WorkflowNode {
+  return {
+    id: node.id,
+    type: node.type as NodeType,
+    position: node.position,
+    data: node.data as NodeData
+  }
+}
+
+export function toReactFlowEdge(edge: WorkflowEdge): ReactFlowEdge {
+  return {
+    ...edge
+  } as ReactFlowEdge
+}
+
+export function fromReactFlowEdge(edge: ReactFlowEdge): WorkflowEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target
+  }
 }
 
 // Available services for each node type

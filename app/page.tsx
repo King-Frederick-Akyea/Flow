@@ -1,8 +1,158 @@
+'use client'
+
 import Link from 'next/link'
+import { useUser, signOut } from '@/lib/auth'
+import { useState } from 'react'
+
+function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { signIn, signUp } = await import('@/lib/auth')
+      
+      if (isLogin) {
+        const { error } = await signIn(email, password)
+        if (error) {
+          setError(error.message)
+        } else {
+          onClose()
+          setEmail('')
+          setPassword('')
+        }
+      } else {
+        const { error } = await signUp(email, password)
+        if (error) {
+          setError(error.message)
+        } else {
+          setError('Check your email for verification link!')
+        }
+      }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg w-96">
+        <h2 className="text-xl font-bold mb-4">{isLogin ? 'Login' : 'Sign Up'}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded"
+              placeholder="Enter your email"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded"
+              placeholder="Enter your password"
+            />
+          </div>
+          {error && (
+            <div className="mb-4 text-red-600 text-sm">{error}</div>
+          )}
+          <div className="flex justify-between items-center">
+            <button
+              type="button"
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-blue-600 hover:text-blue-700 text-sm"
+            >
+              {isLogin ? 'Need an account? Sign up' : 'Have an account? Login'}
+            </button>
+            <div className="space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-400"
+              >
+                {loading ? '...' : (isLogin ? 'Login' : 'Sign Up')}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 export default function Home() {
+  const { user, loading } = useUser()
+  const [showAuthModal, setShowAuthModal] = useState(false)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="text-xl font-bold text-gray-900">
+            Workflow Builder
+          </div>
+          <div>
+            {user ? (
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-700">Hello, {user.email}</span>
+                <button
+                  onClick={() => signOut()}
+                  className="text-gray-600 hover:text-gray-800"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              >
+                Login / Sign Up
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
       <div className="container mx-auto px-4 py-16">
         <div className="text-center">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
@@ -14,18 +164,29 @@ export default function Home() {
           </p>
           
           <div className="flex gap-4 justify-center">
-            <Link 
-              href="/workflows/new"
-              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-            >
-              Create Workflow
-            </Link>
-            <Link 
-              href="/workflows"
-              className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:bg-white transition-colors"
-            >
-              View Workflows
-            </Link>
+            {user ? (
+              <>
+                <Link 
+                  href="/workflows/new"
+                  className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Create Workflow
+                </Link>
+                <Link 
+                  href="/workflows"
+                  className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:bg-white transition-colors"
+                >
+                  View Workflows
+                </Link>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              >
+                Get Started
+              </button>
+            )}
           </div>
 
           {/* Features Grid */}
@@ -62,6 +223,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   )
 }
