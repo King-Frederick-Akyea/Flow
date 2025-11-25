@@ -1,4 +1,4 @@
-import { WorkflowGraph, Node, WorkflowRun } from '@/types/workflow'
+import { WorkflowGraph, WorkflowNode, WorkflowRun } from '@/types/workflow'
 import { supabase } from './supabase'
 
 class ExecutionEngine {
@@ -56,7 +56,7 @@ class ExecutionEngine {
     logs.push(`Starting execution from trigger: ${startNode.data.label}`)
 
     // Execute nodes in order (simplified linear execution)
-    let currentNode: Node | undefined = startNode
+    let currentNode: WorkflowNode | undefined = startNode
     while (currentNode) {
       const result = await this.executeNode(currentNode, context)
       logs.push(`Executed ${currentNode.data.label}: ${JSON.stringify(result)}`)
@@ -69,7 +69,7 @@ class ExecutionEngine {
     return { logs, finalContext: context }
   }
 
-  private async executeNode(node: Node, context: any): Promise<any> {
+  private async executeNode(node: WorkflowNode, context: any): Promise<any> {
     switch (node.type) {
       case 'trigger':
         return this.executeTrigger(node, context)
@@ -91,12 +91,12 @@ class ExecutionEngine {
     }
   }
 
-  private async executeTrigger(node: Node, context: any): Promise<any> {
+  private async executeTrigger(node: WorkflowNode, context: any): Promise<any> {
     // Simulate trigger execution
     return { triggeredAt: new Date().toISOString(), type: node.data.config?.schedule }
   }
 
-  private async executeDataSource(node: Node, context: any): Promise<any> {
+  private async executeDataSource(node: WorkflowNode, context: any): Promise<any> {
     const source = node.data.config?.source
     
     switch (source) {
@@ -113,17 +113,17 @@ class ExecutionEngine {
     }
   }
 
-  private async executeLogic(node: Node, context: any): Promise<any> {
+  private async executeLogic(node: WorkflowNode, context: any): Promise<any> {
     // Simple condition logic simulation
     return { conditionMet: true, processed: true }
   }
 
-  private async executeTransform(node: Node, context: any): Promise<any> {
+  private async executeTransform(node: WorkflowNode, context: any): Promise<any> {
     // Data transformation simulation
     return { transformed: true, timestamp: new Date().toISOString() }
   }
 
-  private async executeAction(node: Node, context: any): Promise<any> {
+  private async executeAction(node: WorkflowNode, context: any): Promise<any> {
     const action = node.data.config?.action
     
     switch (action) {
