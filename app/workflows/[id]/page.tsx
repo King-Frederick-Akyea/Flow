@@ -73,12 +73,12 @@ export default async function WorkflowPage({ params }: WorkflowPageProps) {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="bg-white border-b border-gray-200 p-4">
+      {/* <div className="bg-white border-b border-gray-200 p-4">
         <h1 className="text-2xl font-bold text-gray-900">{workflow.name}</h1>
         {workflow.description && (
           <p className="text-gray-600 mt-1">{workflow.description}</p>
         )}
-      </div>
+      </div> */}
       <div className="flex-1">
         <WorkflowBuilder 
           initialGraph={workflow.graph_data}

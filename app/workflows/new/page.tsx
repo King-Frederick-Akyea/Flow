@@ -265,7 +265,7 @@ export default function NewWorkflowPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="bg-white border-b border-gray-200 p-4 flex justify-between items-center">
+      {/* <div className="bg-white border-b border-gray-200 p-4 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Create New Workflow</h1>
           <p className="text-gray-600 mt-1">Drag and drop nodes to build your automation workflow</p>
@@ -275,7 +275,7 @@ export default function NewWorkflowPage() {
             Logged in as: {user.email}
           </div>
         )}
-      </div>
+      </div> */}
       <div className="flex-1">
         <WorkflowBuilder 
           onSave={handleSaveRequest}
