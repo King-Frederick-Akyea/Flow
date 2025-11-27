@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
 import { WorkflowGraph } from '@/types/workflow'
 import { executionEngine } from '@/lib/executionEngine'
@@ -31,6 +31,14 @@ export function ExecutionPanel({
   const [executionLog, setExecutionLog] = useState<string[]>([])
   const [panelHeight, setPanelHeight] = useState(320)
   const [activeTab, setActiveTab] = useState<'config' | 'logs'>('config')
+  const [localConfig, setLocalConfig] = useState<any>({})
+
+  // Update local config when selected node changes
+  useEffect(() => {
+    if (selectedNode) {
+      setLocalConfig(selectedNode.data.config || {})
+    }
+  }, [selectedNode])
 
   const handleExecute = async () => {
     if (!workflowId) {
@@ -64,14 +72,21 @@ export function ExecutionPanel({
     setExecutionLog(prev => [...prev, '💾 Workflow saved successfully'])
   }
 
-  const handleConfigChange = (nodeId: string, field: string, value: any) => {
-    const node = selectedNode!
-    const currentConfig = node.data.config || {}
+  const handleConfigChange = (field: string, value: any) => {
+    if (!selectedNode) return;
     
-    onConfigUpdate(nodeId, {
-      ...currentConfig,
+    const updatedConfig = {
+      ...localConfig,
       [field]: value
-    })
+    };
+    
+    setLocalConfig(updatedConfig);
+    onConfigUpdate(selectedNode.id, updatedConfig);
+  }
+
+  // Add this function to handle input events properly
+  const handleInputChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    handleConfigChange(field, e.target.value);
   }
 
   const renderConnectionInfo = () => {
@@ -132,7 +147,7 @@ export function ExecutionPanel({
     }
 
     return (
-      <div className="p-6">
+      <div key={selectedNode.id} className="p-6"> {/* Added key here */}
         <div className="flex items-center space-x-3 mb-6">
           <div className="p-2 bg-slate-100 rounded-lg">
             <Settings className="w-5 h-5 text-slate-600" />
@@ -149,7 +164,6 @@ export function ExecutionPanel({
 
   const renderConfigForm = (node: ReactFlowNode) => {
     const nodeData = node.data
-    const config = nodeData.config || {}
 
     switch (node.type) {
       case 'trigger':
@@ -161,8 +175,8 @@ export function ExecutionPanel({
               </label>
               <select 
                 className="w-full p-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                value={config.schedule || ''}
-                onChange={(e) => handleConfigChange(node.id, 'schedule', e.target.value)}
+                value={localConfig.schedule || ''}
+                onChange={handleInputChange('schedule')}
               >
                 <option value="every_minute">Every Minute</option>
                 <option value="hourly">Hourly</option>
@@ -175,8 +189,7 @@ export function ExecutionPanel({
         )
       
       case 'dataSource':
-        // Show configuration based on the fixed source
-        switch (config.source) {
+        switch (localConfig.source) {
           case 'weather':
             return (
               <div className="space-y-4">
@@ -188,8 +201,8 @@ export function ExecutionPanel({
                     type="text"
                     className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="Enter city name"
-                    value={config.city || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'city', e.target.value)}
+                    value={localConfig.city || ''}
+                    onChange={handleInputChange('city')}
                   />
                 </div>
                 <div>
@@ -200,8 +213,8 @@ export function ExecutionPanel({
                     type="text"
                     className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="UK"
-                    value={config.country || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'country', e.target.value)}
+                    value={localConfig.country || ''}
+                    onChange={handleInputChange('country')}
                   />
                 </div>
                 <div>
@@ -210,8 +223,8 @@ export function ExecutionPanel({
                   </label>
                   <select 
                     className="w-full p-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    value={config.units || 'metric'}
-                    onChange={(e) => handleConfigChange(node.id, 'units', e.target.value)}
+                    value={localConfig.units || 'metric'}
+                    onChange={handleInputChange('units')}
                   >
                     <option value="metric">Celsius</option>
                     <option value="imperial">Fahrenheit</option>
@@ -231,8 +244,8 @@ export function ExecutionPanel({
                     type="text"
                     className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="owner/repository"
-                    value={config.repository || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'repository', e.target.value)}
+                    value={localConfig.repository || ''}
+                    onChange={handleInputChange('repository')}
                   />
                 </div>
               </div>
@@ -241,14 +254,13 @@ export function ExecutionPanel({
           default:
             return (
               <div className="text-slate-500 text-center py-8">
-                Configuration for {config.source} data source
+                Configuration for {localConfig.source} data source
               </div>
             )
         }
       
       case 'action':
-        // Show configuration based on the fixed action
-        switch (config.action) {
+        switch (localConfig.action) {
           case 'email':
             return (
               <div className="space-y-4">
@@ -260,36 +272,9 @@ export function ExecutionPanel({
                     type="email"
                     className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="recipient@example.com"
-                    value={config.to || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'to', e.target.value)}
+                    value={localConfig.to || ''}
+                    onChange={handleInputChange('to')}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Subject
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    placeholder="Weather Report for {{city}}"
-                    value={config.subject || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'subject', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Message
-                  </label>
-                  <textarea
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    placeholder={`Current weather in {{city}}: {{temperature}}°C, {{condition}}`}
-                    rows={4}
-                    value={config.text || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'text', e.target.value)}
-                  />
-                  <p className="text-xs text-slate-500 mt-2">
-                    Use <code className="bg-slate-100 px-1 rounded">{'{{placeholders}}'}</code> for dynamic data
-                  </p>
                 </div>
               </div>
             )
@@ -305,8 +290,8 @@ export function ExecutionPanel({
                     type="url"
                     className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="https://hooks.slack.com/services/..."
-                    value={config.webhookUrl || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'webhookUrl', e.target.value)}
+                    value={localConfig.webhookUrl || ''}
+                    onChange={handleInputChange('webhookUrl')}
                   />
                 </div>
                 <div>
@@ -317,8 +302,8 @@ export function ExecutionPanel({
                     className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="Workflow executed successfully!"
                     rows={3}
-                    value={config.message || ''}
-                    onChange={(e) => handleConfigChange(node.id, 'message', e.target.value)}
+                    value={localConfig.message || ''}
+                    onChange={handleInputChange('message')}
                   />
                 </div>
               </div>
@@ -327,7 +312,7 @@ export function ExecutionPanel({
           default:
             return (
               <div className="text-slate-500 text-center py-8">
-                Configuration for {config.action} action
+                Configuration for {localConfig.action} action
               </div>
             )
         }
@@ -343,8 +328,8 @@ export function ExecutionPanel({
                 type="text"
                 className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="temperature > 20"
-                value={config.condition || ''}
-                onChange={(e) => handleConfigChange(node.id, 'condition', e.target.value)}
+                value={localConfig.condition || ''}
+                onChange={handleInputChange('condition')}
               />
               <p className="text-xs text-slate-500 mt-2">
                 Examples: <code>temperature {'>'} 20</code>, <code>condition === 'Rain'</code>
@@ -364,8 +349,8 @@ export function ExecutionPanel({
                 type="text"
                 className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="Transform weather data for email"
-                value={config.description || ''}
-                onChange={(e) => handleConfigChange(node.id, 'description', e.target.value)}
+                value={localConfig.description || ''}
+                onChange={handleInputChange('description')}
               />
             </div>
           </div>
@@ -382,8 +367,8 @@ export function ExecutionPanel({
                 className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="Process the weather data and create a friendly summary..."
                 rows={4}
-                value={config.prompt || ''}
-                onChange={(e) => handleConfigChange(node.id, 'prompt', e.target.value)}
+                value={localConfig.prompt || ''}
+                onChange={handleInputChange('prompt')}
               />
             </div>
           </div>
@@ -398,6 +383,7 @@ export function ExecutionPanel({
     }
   }
 
+  // ... rest of the component remains the same
   const renderLogs = () => (
     <div className="h-full flex flex-col">
       <div className="flex-1 p-4 overflow-y-auto font-mono text-sm bg-slate-50 rounded-lg">

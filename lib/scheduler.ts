@@ -1,87 +1,49 @@
-// Simple in-memory scheduler for demo purposes
-// In production, you'd use Redis with BullMQ or similar
-
-interface ScheduledJob {
-  id: string
-  workflowId: string
-  cron: string
-  lastRun: Date | null
-  nextRun: Date
-  enabled: boolean
-}
-
+// Simple scheduler for demo - in production use Redis/Cron
 class SimpleScheduler {
-  private jobs: Map<string, ScheduledJob> = new Map()
-  private intervals: Map<string, NodeJS.Timeout> = new Map()
+  private schedules: Map<string, NodeJS.Timeout> = new Map()
 
-  scheduleWorkflow(workflowId: string, cron: string) {
-    const jobId = `job-${workflowId}`
+  scheduleWorkflow(workflowId: string, schedule: string, executeCallback: () => void) {
+    // Clear existing schedule
+    this.unscheduleWorkflow(workflowId)
+
+    let intervalMs = 60000; // Default: 1 minute
     
-    // Parse cron (simple implementation for demo)
-    const nextRun = this.calculateNextRun(cron)
-    
-    const job: ScheduledJob = {
-      id: jobId,
-      workflowId,
-      cron,
-      lastRun: null,
-      nextRun,
-      enabled: true
+    switch (schedule) {
+      case 'every_minute':
+        intervalMs = 60000
+        break
+      case 'hourly':
+        intervalMs = 3600000
+        break
+      case 'daily':
+        intervalMs = 86400000
+        break
+      case 'weekly':
+        intervalMs = 604800000
+        break
+      case 'monthly':
+        intervalMs = 2629746000 // Approx 1 month
+        break
+      default:
+        intervalMs = 60000
     }
+
+    console.log(`Scheduling workflow ${workflowId} to run every ${intervalMs}ms`)
     
-    this.jobs.set(jobId, job)
-    
-    // Set up interval based on cron
-    const interval = this.setupExecution(workflowId, cron)
-    this.intervals.set(jobId, interval)
-    
-    console.log(`Scheduled workflow ${workflowId} with cron: ${cron}`)
-    return jobId
+    const interval = setInterval(() => {
+      console.log(`🕒 Executing scheduled workflow: ${workflowId}`)
+      executeCallback()
+    }, intervalMs)
+
+    this.schedules.set(workflowId, interval)
   }
 
   unscheduleWorkflow(workflowId: string) {
-    const jobId = `job-${workflowId}`
-    const interval = this.intervals.get(jobId)
-    
-    if (interval) {
-      clearInterval(interval)
-      this.intervals.delete(jobId)
+    const existing = this.schedules.get(workflowId)
+    if (existing) {
+      clearInterval(existing)
+      this.schedules.delete(workflowId)
     }
-    
-    this.jobs.delete(jobId)
-    console.log(`Unscheduled workflow ${workflowId}`)
-  }
-
-  private setupExecution(workflowId: string, cron: string): NodeJS.Timeout {
-    // Simple implementation - in production, use proper cron parsing
-    const interval = cron === 'every_minute' ? 60000 : 
-                   cron === 'hourly' ? 3600000 :
-                   cron === 'daily' ? 86400000 : 60000 // Default to 1 minute
-    
-    return setInterval(async () => {
-      console.log(`Executing scheduled workflow: ${workflowId}`)
-      // Here you would trigger the workflow execution
-      // await executeWorkflow(workflowId)
-    }, interval)
-  }
-
-  private calculateNextRun(cron: string): Date {
-    const now = new Date()
-    
-    switch (cron) {
-      case 'every_minute':
-        return new Date(now.getTime() + 60000)
-      case 'hourly':
-        return new Date(now.getTime() + 3600000)
-      case 'daily':
-        return new Date(now.getTime() + 86400000)
-      default:
-        return new Date(now.getTime() + 60000)
-    }
-  }
-
-  getScheduledJobs(): ScheduledJob[] {
-    return Array.from(this.jobs.values())
   }
 }
 

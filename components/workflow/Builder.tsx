@@ -110,12 +110,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
       } else if (type === 'action') {
         switch (label) {
           case 'Email':
-            config = { 
-              action: 'email', 
-              to: 'user@example.com', 
-              subject: 'Workflow Notification',
-              text: 'Hello from your workflow!'
-            }
+            config = { action: 'email', to: '' }
             break
           case 'Slack':
             config = { 
@@ -311,7 +306,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
 
         {/* Main Canvas Area */}
         <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
-          <ReactFlow
+            <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -322,9 +317,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
             nodeTypes={nodeTypes}
             fitView
             className="bg-transparent"
-            edgesDeletable={false}
-            nodesDeletable={false}
-          >
+            >
             <Controls 
               className="bg-white shadow-lg border border-slate-200 rounded-lg p-1"
               position="top-right"
