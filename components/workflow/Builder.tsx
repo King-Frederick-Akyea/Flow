@@ -285,22 +285,22 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
               </button>
             )}
             
-            <button
+            {/* <button
               onClick={handleSave}
               className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Save className="w-4 h-4" />
               <span>Save</span>
-            </button>
+            </button> */}
             
-            <button
+            {/* <button
               onClick={handleExecute}
               disabled={isExecuting || !workflowId}
               className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
             >
               <Play className="w-4 h-4" />
               <span>{isExecuting ? 'Running...' : 'Execute'}</span>
-            </button>
+            </button> */}
           </div>
         </div>
 
