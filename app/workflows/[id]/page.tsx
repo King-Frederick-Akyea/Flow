@@ -38,7 +38,6 @@ export default async function WorkflowPage({ params }: WorkflowPageProps) {
     notFound()
   }
 
-  // Server action for saving
   const handleSave = async (graph: WorkflowGraph) => {
     'use server'
     

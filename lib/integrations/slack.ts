@@ -1,14 +1,22 @@
 export const slackService = {
   async sendMessage(config: any, data: any) {
     const webhookUrl = config.webhookUrl || process.env.SLACK_WEBHOOK_URL
-    
+
     if (!webhookUrl) {
-      throw new Error('Slack webhook URL not configured')
+      throw new Error('Slack webhook URL is required')
     }
 
     const message = {
-      text: this.replacePlaceholders(config.text, data),
-      blocks: config.blocks || []
+      text: config.text || 'Workflow notification',
+      blocks: config.blocks || [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: data ? `Workflow data: \`\`\`${JSON.stringify(data, null, 2)}\`\`\`` : 'Workflow executed successfully'
+          }
+        }
+      ]
     }
 
     const response = await fetch(webhookUrl, {
@@ -20,15 +28,13 @@ export const slackService = {
     })
 
     if (!response.ok) {
-      throw new Error(`Slack API error: ${response.statusText}`)
+      throw new Error(`Slack API error: ${response.status} ${response.statusText}`)
     }
 
-    return { sent: true, service: 'slack' }
-  },
-
-  replacePlaceholders(template: string, data: any): string {
-    return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-      return data[key] || match
-    })
+    return { 
+      success: true, 
+      channel: config.channel,
+      timestamp: new Date().toISOString()
+    }
   }
 }

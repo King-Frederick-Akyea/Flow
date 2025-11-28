@@ -17,14 +17,11 @@ export const githubService = {
     }
 
     try {
-      // Fetch GitHub data using the REST API
       const headers = {
         'Authorization': `token ${token}`,
         'Accept': 'application/vnd.github.v3+json'
       }
 
-      // You would make actual API calls here
-      // For now, return mock data
       return {
         commits: 15,
         issues: 3,

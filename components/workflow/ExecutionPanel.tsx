@@ -42,14 +42,14 @@ export function ExecutionPanel({
 
   const handleExecute = async () => {
     if (!workflowId) {
-      setExecutionLog(prev => [...prev, '❌ Error: Please save the workflow first before executing'])
+      setExecutionLog(prev => [...prev, ' Error: Please save the workflow first before executing'])
       alert('Please save the workflow first before executing')
       return
     }
 
     setIsExecuting(true)
     setActiveTab('logs')
-    setExecutionLog(['🚀 Starting workflow execution...'])
+    setExecutionLog([' Starting workflow execution...'])
 
     try {
       const graph = getCurrentGraph()
@@ -60,7 +60,7 @@ export function ExecutionPanel({
         ...result.logs
       ])
     } catch (error: any) {
-      setExecutionLog(prev => [...prev, `❌ Execution failed: ${error.message}`])
+      setExecutionLog(prev => [...prev, ` Execution failed: ${error.message}`])
     } finally {
       setIsExecuting(false)
     }
@@ -69,7 +69,7 @@ export function ExecutionPanel({
   const handleSave = () => {
     const graph = getCurrentGraph()
     onSave?.(graph)
-    setExecutionLog(prev => [...prev, '💾 Workflow saved successfully'])
+    setExecutionLog(prev => [...prev, ' Workflow saved successfully'])
   }
 
   const handleConfigChange = (field: string, value: any) => {
@@ -383,7 +383,6 @@ export function ExecutionPanel({
     }
   }
 
-  // ... rest of the component remains the same
   const renderLogs = () => (
     <div className="h-full flex flex-col">
       <div className="flex-1 p-4 overflow-y-auto font-mono text-sm bg-slate-50 rounded-lg">
@@ -408,7 +407,6 @@ export function ExecutionPanel({
       className="bg-white border-t border-slate-200 flex flex-col transition-all duration-300"
       style={{ height: `${panelHeight}px` }}
     >
-      {/* Resize Handle */}
       <div 
         className="h-4 bg-slate-50 border-b border-slate-200 cursor-row-resize flex items-center justify-center group"
         onMouseDown={(e) => {

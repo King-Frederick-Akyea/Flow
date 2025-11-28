@@ -3,7 +3,6 @@ export const openAIService = {
     const apiKey = config.apiKey || process.env.OPENAI_API_KEY
 
     if (!apiKey) {
-      // Return mock AI response
       return {
         response: "This is a mock AI response. Configure OpenAI API key for real responses.",
         usage: { prompt_tokens: 0, completion_tokens: 0 },
@@ -62,7 +61,6 @@ export const openAIService = {
   buildPrompt(config: any, inputData: any): string {
     let prompt = config.prompt || ''
     
-    // Replace placeholders in prompt with actual data
     prompt = prompt.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       return inputData[key] || match
     })

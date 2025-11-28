@@ -87,7 +87,6 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
         y: event.clientY - 100,
       }
 
-      // Set automatic configuration based on node type and label
       let config = {}
       
       if (type === 'dataSource') {
@@ -96,7 +95,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
             config = { source: 'weather', city: 'London', units: 'metric' }
             break
           case 'GitHub':
-            config = { source: 'github', repository: 'owner/repo' }
+            config = { source: 'githubs', repository: 'owner/repo' }
             break
           case 'HTTP Request':
             config = { source: 'http', url: 'https://api.example.com', method: 'GET' }
@@ -246,7 +245,6 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
     setIsExecuting(true)
     try {
       const graph = getCurrentGraph()
-      // Execution would happen here
       await new Promise(resolve => setTimeout(resolve, 2000))
       console.log('Executing workflow:', graph)
     } catch (error) {

@@ -1,10 +1,11 @@
 import { WorkflowGraph, WorkflowNode } from '@/types/workflow'
 import { weatherService } from './integrations/weather'
 import { emailService } from './integrations/email'
-import { scheduler } from './scheduler'
 
-class ExecutionEngine {
+// Client-safe execution engine (no server dependencies)
+class WorkflowExecutionEngine {
   private executionCount: number = 0
+  private workflowCache: Map<string, WorkflowGraph> = new Map()
 
   async executeWorkflow(workflowId: string, graph: WorkflowGraph): Promise<any> {
     const executionId = `exec-${Date.now()}-${++this.executionCount}`
@@ -12,49 +13,37 @@ class ExecutionEngine {
     const context: any = { executionId }
 
     try {
-      logs.push(`🚀 Starting workflow execution (ID: ${executionId})...`)
+      logs.push(` Starting workflow execution (ID: ${executionId})`)
+      this.workflowCache.set(workflowId, graph)
 
-      // Find start node (trigger)
       const startNode = graph.nodes.find(node => node.type === 'trigger')
       if (!startNode) {
         throw new Error('No trigger node found')
       }
 
-      logs.push(`▶️ Starting from: ${startNode.data.label}`)
+      logs.push(` Starting from: ${startNode.data.label}`)
 
-      // If this is a scheduled workflow, register it
-      if (startNode.data.config?.schedule) {
-        logs.push(`📅 Schedule detected: ${startNode.data.config.schedule}`)
-        this.registerScheduledWorkflow(workflowId, graph, startNode.data.config.schedule)
-      }
-
-      // Execute nodes in order following the connections
+      // Execute nodes in sequence
       let currentNode: WorkflowNode | undefined = startNode
       const executedNodes = new Set<string>()
       
       while (currentNode && !executedNodes.has(currentNode.id)) {
         executedNodes.add(currentNode.id)
         
-        logs.push(`🔧 Executing: ${currentNode.data.label} (${currentNode.type})`)
+        logs.push(` Executing: ${currentNode.data.label}`)
         
         const result = await this.executeNode(currentNode, context)
         context[currentNode.id] = result
-        context['current'] = result // Make available for next nodes
+        context['current'] = result
         
-        logs.push(`✅ ${currentNode.data.label} completed`)
+        logs.push(` ${currentNode.data.label} completed`)
         
-        // Find next node(s) - follow all outgoing edges
-        const outgoingEdges = graph.edges.filter(e => e.source === currentNode!.id)
-        if (outgoingEdges.length > 0) {
-          // For now, take the first edge (we can enhance for branching logic later)
-          const nextEdge = outgoingEdges[0]
-          currentNode = graph.nodes.find(n => n.id === nextEdge.target)
-        } else {
-          currentNode = undefined
-        }
+        const nextEdge = graph.edges.find(e => e.source === currentNode!.id)
+        currentNode = nextEdge ? graph.nodes.find(n => n.id === nextEdge.target) : undefined
       }
 
-      logs.push('🎉 Workflow completed successfully!')
+      logs.push(' Workflow completed successfully!')
+      
       return { 
         success: true, 
         logs, 
@@ -64,7 +53,8 @@ class ExecutionEngine {
       }
 
     } catch (error: any) {
-      logs.push(`❌ Error at step: ${error.message}`)
+      logs.push(` Error: ${error.message}`)
+      
       return { 
         success: false, 
         logs, 
@@ -75,17 +65,6 @@ class ExecutionEngine {
     }
   }
 
-  private registerScheduledWorkflow(workflowId: string, graph: WorkflowGraph, schedule: string) {
-    scheduler.scheduleWorkflow(workflowId, schedule, async () => {
-      try {
-        console.log(`🕒 Automated execution triggered for workflow: ${workflowId}`)
-        await this.executeWorkflow(workflowId, graph)
-      } catch (error) {
-        console.error(`❌ Automated execution failed for ${workflowId}:`, error)
-      }
-    })
-  }
-
   private async executeNode(node: WorkflowNode, context: any): Promise<any> {
     const config = node.data.config || {}
 
@@ -94,142 +73,160 @@ class ExecutionEngine {
         return {
           triggeredAt: new Date().toISOString(),
           schedule: config.schedule,
-          triggerType: 'scheduled',
+          triggerType: 'manual',
           executionContext: context.executionId
         }
       
       case 'dataSource':
-        if (config.source === 'weather') {
-          const weatherData = await weatherService.getWeather(config)
-          return {
-            ...weatherData,
-            retrievedAt: new Date().toISOString()
-          }
-        }
-        throw new Error(`Unsupported data source: ${config.source}`)
+        return await this.executeDataSource(node, config, context)
       
       case 'action':
-        if (config.action === 'email') {
-          // Get the most recent data from context (weather data)
-          const weatherData = this.findWeatherData(context)
-          
-          if (!config.to) {
-            throw new Error('Email recipient (to) is required')
-          }
-
-          const emailConfig = {
-            to: config.to,
-            subject: config.subject,
-            text: config.text
-          }
-
-          const emailData = {
-            ...weatherData,
-            subject: emailConfig.subject,
-            text: emailConfig.text,
-            executionTime: new Date().toLocaleString()
-          }
-
-          try {
-            const result = await emailService.sendEmail(emailConfig, emailData)
-            return { 
-              ...result, 
-              recipient: config.to,
-              dataUsed: weatherData ? 'weather' : 'no data'
-            }
-          } catch (error: any) {
-            throw new Error(`Email failed: ${error.message}`)
-          }
-        }
-        throw new Error(`Unsupported action: ${config.action}`)
+        return await this.executeAction(node, config, context)
       
       case 'logic':
-        // Basic condition evaluation - you can enhance this
-        return {
-          condition: config.condition,
-          evaluated: true,
-          result: this.evaluateCondition(config.condition, context)
-        }
-
+        return await this.executeLogic(node, config, context)
+      
       case 'transform':
-        // Simple data transformation
-        return {
-          originalData: context.current,
-          transformed: true,
-          description: config.description
-        }
-
+        return await this.executeTransform(node, config, context)
+      
       case 'ai':
-        // Placeholder for AI processing
-        return {
-          prompt: config.prompt,
-          processed: true,
-          result: `AI processed: ${config.prompt?.substring(0, 50)}...`
-        }
+        return await this.executeAI(node, config, context)
       
       default:
-        return { nodeType: node.type, executed: true }
+        throw new Error(`Unknown node type: ${node.type}`)
     }
   }
 
-  private findWeatherData(context: any): any {
-    // Look for weather data in the context
-    for (const key in context) {
-      if (context[key] && context[key].temperature !== undefined) {
-        return context[key]
+  private async executeDataSource(node: WorkflowNode, config: any, context: any): Promise<any> {
+    const source = config.source
+
+    switch (source) {
+      case 'weather':
+        return await weatherService.getWeather(config)
+      
+      default:
+        throw new Error(`Unsupported data source: ${source}`)
+    }
+  }
+
+  private async executeAction(node: WorkflowNode, config: any, context: any): Promise<any> {
+    const action = config.action
+    const previousData = context.current || this.findPreviousData(context)
+
+    switch (action) {
+      case 'email':
+        if (!config.to) {
+          throw new Error('Email recipient (to) is required')
+        }
+        return await emailService.sendEmail(config, previousData)
+      
+      default:
+        throw new Error(`Unsupported action: ${action}`)
+    }
+  }
+
+  private async executeLogic(node: WorkflowNode, config: any, context: any): Promise<any> {
+    const inputData = context.current || this.findPreviousData(context)
+    
+    if (config.condition) {
+      const result = this.evaluateCondition(config.condition, inputData, context)
+      return {
+        condition: config.condition,
+        result,
+        dataUsed: inputData
+      }
+    }
+
+    return {
+      operation: 'logic',
+      executed: true,
+      data: inputData
+    }
+  }
+
+  private async executeTransform(node: WorkflowNode, config: any, context: any): Promise<any> {
+    const inputData = context.current || this.findPreviousData(context)
+    
+    if (config.mapping && typeof inputData === 'object') {
+      const transformed: any = {}
+      for (const [key, value] of Object.entries(config.mapping)) {
+        if (typeof value === 'string' && value.startsWith('$.')) {
+          const path = value.substring(2)
+          transformed[key] = this.getNestedValue(inputData, path)
+        } else {
+          transformed[key] = value
+        }
+      }
+      return transformed
+    }
+
+    return {
+      operation: 'transform',
+      input: inputData,
+      executed: true
+    }
+  }
+
+  private async executeAI(node: WorkflowNode, config: any, context: any): Promise<any> {
+    const inputData = context.current || this.findPreviousData(context)
+    
+    return {
+      operation: 'ai',
+      prompt: config.prompt,
+      input: inputData,
+      result: `AI processed: ${config.prompt?.substring(0, 50)}...`,
+      executed: true
+    }
+  }
+
+  // Helper methods
+  private findPreviousData(context: any): any {
+    const keys = Object.keys(context).filter(key => !['executionId', 'current'].includes(key))
+    
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const value = context[keys[i]]
+      if (value && typeof value === 'object' && !value.triggeredAt) {
+        return value
       }
     }
     return null
   }
 
-  private evaluateCondition(condition: string, context: any): boolean {
-    // Simple condition evaluation - you can make this more sophisticated
+  private evaluateCondition(condition: string, data: any, context: any): boolean {
     try {
-      // Extract variable and value (e.g., "temperature > 20")
-      const weatherData = this.findWeatherData(context)
-      if (!weatherData) return false
-
-      // Simple template replacement
-      let evaluatedCondition = condition
-      for (const key in weatherData) {
-        const value = weatherData[key]
-        if (typeof value === 'number' || typeof value === 'string') {
-          evaluatedCondition = evaluatedCondition.replace(
-            new RegExp(key, 'g'), 
-            typeof value === 'string' ? `"${value}"` : value
-          )
+      let evaluated = condition
+      
+      if (data && typeof data === 'object') {
+        for (const [key, value] of Object.entries(data)) {
+          if (typeof value === 'number' || typeof value === 'string') {
+            evaluated = evaluated.replace(
+              new RegExp(`data\\.${key}`, 'g'),
+              typeof value === 'string' ? `"${value}"` : value.toString()
+            )
+          }
         }
       }
 
-      // Very basic evaluation - in production use a proper expression evaluator
-      return eval(evaluatedCondition)
+      evaluated = evaluated.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+        return context[key] !== undefined ? JSON.stringify(context[key]) : 'undefined'
+      })
+
+      return Function(`"use strict"; return (${evaluated})`)()
     } catch (error) {
       console.error('Condition evaluation error:', error)
       return false
     }
   }
 
-  // Method to stop all scheduled workflows
-  stopAllSchedules() {
-    const schedules = scheduler.getScheduledWorkflows()
-    schedules.forEach(workflow => {
-      scheduler.unscheduleWorkflow(workflow.workflowId)
-    })
+  private getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj)
   }
 
-  // Method to get schedule status
-  getScheduleStatus(workflowId: string) {
-    const nextExecution = scheduler.getNextExecution(workflowId)
-    return {
-      scheduled: nextExecution !== null,
-      nextExecution,
-      workflows: scheduler.getScheduledWorkflows().map(w => ({
-        id: w.workflowId,
-        schedule: w.schedule,
-        nextExecution: w.nextExecution
-      }))
-    }
+  // For testing - manually register a workflow
+  registerWorkflowForTesting(workflowId: string, graph: WorkflowGraph) {
+    this.workflowCache.set(workflowId, graph)
+    console.log(`📝 Registered workflow ${workflowId} for testing`)
   }
 }
 
-export const executionEngine = new ExecutionEngine()
+export const executionEngine = new WorkflowExecutionEngine()

@@ -12,7 +12,6 @@ export const emailService = {
       throw new Error('Default from email is not configured. Please add NEXT_PUBLIC_DEFAULT_FROM_EMAIL to your environment variables.')
     }
 
-    // Generate meaningful subject and content based on data
     const subject = data.subject || this.generateSubject(data)
     const textContent = data.text || this.generateTextContent(data)
     const htmlContent = this.generateHTMLContent(data)
