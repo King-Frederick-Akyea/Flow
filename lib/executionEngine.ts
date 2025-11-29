@@ -1,6 +1,5 @@
 import { WorkflowGraph, WorkflowNode } from '@/types/workflow'
-import { weatherService } from './integrations/weather'
-import { emailService } from './integrations/email'
+import { serviceRegistry, getService, ServiceResult } from './integrations'
 
 // Client-safe execution engine (no server dependencies)
 class WorkflowExecutionEngine {
@@ -13,7 +12,7 @@ class WorkflowExecutionEngine {
     const context: any = { executionId }
 
     try {
-      logs.push(` Starting workflow execution (ID: ${executionId})`)
+      logs.push(`🚀 Starting workflow execution (ID: ${executionId})`)
       this.workflowCache.set(workflowId, graph)
 
       const startNode = graph.nodes.find(node => node.type === 'trigger')
@@ -21,28 +20,29 @@ class WorkflowExecutionEngine {
         throw new Error('No trigger node found')
       }
 
-      logs.push(` Starting from: ${startNode.data.label}`)
+      logs.push(`📍 Starting from: ${startNode.data.label}`)
 
-      // Execute nodes in sequence
+      // Execute nodes in sequence following the connections
       let currentNode: WorkflowNode | undefined = startNode
       const executedNodes = new Set<string>()
       
       while (currentNode && !executedNodes.has(currentNode.id)) {
         executedNodes.add(currentNode.id)
         
-        logs.push(` Executing: ${currentNode.data.label}`)
+        logs.push(`⚡ Executing: ${currentNode.data.label} (${currentNode.type})`)
         
         const result = await this.executeNode(currentNode, context)
         context[currentNode.id] = result
         context['current'] = result
         
-        logs.push(` ${currentNode.data.label} completed`)
+        logs.push(`✅ ${currentNode.data.label} completed`)
         
+        // Find the next node by following edges
         const nextEdge = graph.edges.find(e => e.source === currentNode!.id)
         currentNode = nextEdge ? graph.nodes.find(n => n.id === nextEdge.target) : undefined
       }
 
-      logs.push(' Workflow completed successfully!')
+      logs.push('🎉 Workflow completed successfully!')
       
       return { 
         success: true, 
@@ -53,7 +53,7 @@ class WorkflowExecutionEngine {
       }
 
     } catch (error: any) {
-      logs.push(` Error: ${error.message}`)
+      logs.push(`❌ Error: ${error.message}`)
       
       return { 
         success: false, 
@@ -67,84 +67,115 @@ class WorkflowExecutionEngine {
 
   private async executeNode(node: WorkflowNode, context: any): Promise<any> {
     const config = node.data.config || {}
+    const nodeData = node.data
 
-    switch (node.type) {
-      case 'trigger':
-        return {
-          triggeredAt: new Date().toISOString(),
-          schedule: config.schedule,
-          triggerType: 'manual',
-          executionContext: context.executionId
-        }
-      
-      case 'dataSource':
-        return await this.executeDataSource(node, config, context)
-      
-      case 'action':
-        return await this.executeAction(node, config, context)
-      
-      case 'logic':
-        return await this.executeLogic(node, config, context)
-      
-      case 'transform':
-        return await this.executeTransform(node, config, context)
-      
-      case 'ai':
-        return await this.executeAI(node, config, context)
-      
-      default:
-        throw new Error(`Unknown node type: ${node.type}`)
+    try {
+      switch (node.type) {
+        case 'trigger':
+          return {
+            triggeredAt: new Date().toISOString(),
+            schedule: config.schedule,
+            triggerType: config.triggerType || 'scheduled',
+            executionContext: context.executionId
+          }
+        
+        case 'dataSource':
+          return await this.executeDataSource(nodeData, config, context)
+        
+        case 'action':
+          return await this.executeAction(nodeData, config, context)
+        
+        case 'logic':
+          return await this.executeLogic(nodeData, config, context)
+        
+        case 'transform':
+          return await this.executeTransform(nodeData, config, context)
+        
+        case 'ai':
+          return await this.executeAI(nodeData, config, context)
+        
+        default:
+          throw new Error(`Unknown node type: ${node.type}`)
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to execute ${node.data.label}: ${error.message}`)
     }
   }
 
-  private async executeDataSource(node: WorkflowNode, config: any, context: any): Promise<any> {
+  private async executeDataSource(nodeData: any, config: any, context: any): Promise<any> {
     const source = config.source
 
-    switch (source) {
-      case 'weather':
-        return await weatherService.getWeather(config)
+    if (!source) {
+      throw new Error('Data source not specified')
+    }
+
+    try {
+      const service = getService('dataSource', source)
+      const result: ServiceResult = await service.execute(config, context)
       
-      default:
-        throw new Error(`Unsupported data source: ${source}`)
+      if (!result.success) {
+        throw new Error(result.error || `Data source ${source} failed`)
+      }
+
+      return {
+        source,
+        data: result.data,
+        timestamp: new Date().toISOString()
+      }
+    } catch (error: any) {
+      throw new Error(`Data source ${source} error: ${error.message}`)
     }
   }
 
-  private async executeAction(node: WorkflowNode, config: any, context: any): Promise<any> {
+  private async executeAction(nodeData: any, config: any, context: any): Promise<any> {
     const action = config.action
-    const previousData = context.current || this.findPreviousData(context)
 
-    switch (action) {
-      case 'email':
-        if (!config.to) {
-          throw new Error('Email recipient (to) is required')
-        }
-        return await emailService.sendEmail(config, previousData)
+    if (!action) {
+      throw new Error('Action not specified')
+    }
+
+    try {
+      const service = getService('action', action)
+      const previousData = context.current || this.findPreviousData(context)
+      const result: ServiceResult = await service.execute(config, previousData)
       
-      default:
-        throw new Error(`Unsupported action: ${action}`)
+      if (!result.success) {
+        throw new Error(result.error || `Action ${action} failed`)
+      }
+
+      return {
+        action,
+        result: result.data,
+        timestamp: new Date().toISOString()
+      }
+    } catch (error: any) {
+      throw new Error(`Action ${action} error: ${error.message}`)
     }
   }
 
-  private async executeLogic(node: WorkflowNode, config: any, context: any): Promise<any> {
+  private async executeLogic(nodeData: any, config: any, context: any): Promise<any> {
     const inputData = context.current || this.findPreviousData(context)
     
     if (config.condition) {
       const result = this.evaluateCondition(config.condition, inputData, context)
       return {
+        type: 'condition',
         condition: config.condition,
         result,
-        dataUsed: inputData
+        dataUsed: inputData,
+        timestamp: new Date().toISOString()
       }
     }
 
     return {
-      operation: 'logic',
+      type: 'logic',
       executed: true,
-      data: inputData
+      data: inputData,
+      timestamp: new Date().toISOString()
     }
   }
 
-  private async executeTransform(node: WorkflowNode, config: any, context: any): Promise<any> {
+  private async executeTransform(nodeData: any, config: any, context: any): Promise<any> {
     const inputData = context.current || this.findPreviousData(context)
     
     if (config.mapping && typeof inputData === 'object') {
@@ -157,25 +188,42 @@ class WorkflowExecutionEngine {
           transformed[key] = value
         }
       }
-      return transformed
+      return {
+        type: 'transform',
+        transformed,
+        original: inputData,
+        timestamp: new Date().toISOString()
+      }
     }
 
     return {
-      operation: 'transform',
+      type: 'transform',
       input: inputData,
-      executed: true
+      executed: true,
+      timestamp: new Date().toISOString()
     }
   }
 
-  private async executeAI(node: WorkflowNode, config: any, context: any): Promise<any> {
+  private async executeAI(nodeData: any, config: any, context: any): Promise<any> {
     const inputData = context.current || this.findPreviousData(context)
     
-    return {
-      operation: 'ai',
-      prompt: config.prompt,
-      input: inputData,
-      result: `AI processed: ${config.prompt?.substring(0, 50)}...`,
-      executed: true
+    try {
+      const service = getService('ai', 'ai')
+      const result: ServiceResult = await service.execute(config, inputData)
+      
+      if (!result.success) {
+        throw new Error(result.error || 'AI processing failed')
+      }
+
+      return {
+        type: 'ai',
+        prompt: config.prompt,
+        input: inputData,
+        result: result.data,
+        timestamp: new Date().toISOString()
+      }
+    } catch (error: any) {
+      throw new Error(`AI processing error: ${error.message}`)
     }
   }
 

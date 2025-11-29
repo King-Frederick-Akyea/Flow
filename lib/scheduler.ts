@@ -13,14 +13,25 @@ interface ScheduledWorkflow {
 }
 
 class AdvancedClientScheduler {
+  private static instance: AdvancedClientScheduler
   private schedules: Map<string, ScheduledWorkflow> = new Map()
   private heartbeatTimer: NodeJS.Timeout | null = null
   private isInitialized = false
   private executionLocks: Map<string, boolean> = new Map()
 
-  constructor() {
+  // Singleton pattern to prevent multiple instances
+  public static getInstance(): AdvancedClientScheduler {
+    if (!AdvancedClientScheduler.instance) {
+      AdvancedClientScheduler.instance = new AdvancedClientScheduler()
+    }
+    return AdvancedClientScheduler.instance
+  }
+
+  private constructor() {
     if (typeof window !== "undefined") {
-      // Use requestAnimationFrame to ensure DOM is ready
+      // Clean up any existing instances and timers
+      this.destroy()
+      
       requestAnimationFrame(() => {
         this.initialize()
       })
@@ -32,6 +43,10 @@ class AdvancedClientScheduler {
     this.isInitialized = true
 
     console.log("🔄 Scheduler initializing…")
+
+    // Clear any existing data first
+    this.schedules.clear()
+    this.executionLocks.clear()
 
     const stored = this.getStoredSchedules()
     console.log("📦 Found stored schedules:", stored.length)
@@ -54,16 +69,19 @@ class AdvancedClientScheduler {
     this.startHeartbeat()
     console.log("✅ Scheduler ready with", this.schedules.size, "active workflows")
     
-    // Debug output
     this.debugSchedules()
   }
 
   private startHeartbeat() {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    // Clear any existing timer first
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
 
     this.heartbeatTimer = setInterval(() => {
       this.checkDueWorkflows()
-    }, 2000) // Check every 2 seconds
+    }, 2000)
 
     console.log("❤️ Heartbeat started")
   }
@@ -72,8 +90,15 @@ class AdvancedClientScheduler {
     const now = Date.now()
     let dueCount = 0
 
-    for (const [id, workflow] of this.schedules) {
-      if (!workflow.isActive) continue
+    // Create a copy to avoid modification during iteration
+    const schedules = Array.from(this.schedules.entries())
+    
+    for (const [id, workflow] of schedules) {
+      // Double-check if workflow still exists and is active
+      const currentWorkflow = this.schedules.get(id)
+      if (!currentWorkflow || !currentWorkflow.isActive) {
+        continue
+      }
       
       // Skip if currently executing
       if (this.executionLocks.get(id)) {
@@ -83,30 +108,32 @@ class AdvancedClientScheduler {
       if (now >= workflow.nextExecution) {
         dueCount++
         console.log(`⚡ Workflow ${id} is DUE! Running now...`)
-        console.log(`   Scheduled: ${new Date(workflow.nextExecution).toISOString()}`)
-        console.log(`   Current: ${new Date(now).toISOString()}`)
         
         this.executionLocks.set(id, true)
         
         try {
           await this.runWorkflow(id)
           
-          // Calculate next execution - FIXED: Use the original nextExecution as base
-          const intervalMs = this.getIntervalMs(workflow.schedule)
-          const newNextExecution = workflow.nextExecution + intervalMs
-          
-          workflow.nextExecution = newNextExecution
-          workflow.updatedAt = Date.now()
-          
-          console.log(`✅ Workflow ${id} completed. Next run: ${new Date(workflow.nextExecution).toISOString()}`)
+          // Only update if workflow still exists and is active
+          const updatedWorkflow = this.schedules.get(id)
+          if (updatedWorkflow && updatedWorkflow.isActive) {
+            const intervalMs = this.getIntervalMs(workflow.schedule)
+            updatedWorkflow.nextExecution = workflow.nextExecution + intervalMs
+            updatedWorkflow.updatedAt = Date.now()
+            
+            console.log(`✅ Workflow ${id} completed. Next run: ${new Date(updatedWorkflow.nextExecution).toISOString()}`)
+          }
           
           this.saveAll()
         } catch (error) {
           console.error(`❌ Workflow ${id} failed:`, error)
-          // On error, still schedule next execution but use current time as base
-          const intervalMs = this.getIntervalMs(workflow.schedule)
-          workflow.nextExecution = Date.now() + intervalMs
-          this.saveAll()
+          // Only reschedule if workflow still exists and active
+          const failedWorkflow = this.schedules.get(id)
+          if (failedWorkflow && failedWorkflow.isActive) {
+            const intervalMs = this.getIntervalMs(workflow.schedule)
+            failedWorkflow.nextExecution = Date.now() + intervalMs
+            this.saveAll()
+          }
         } finally {
           this.executionLocks.set(id, false)
         }
@@ -155,7 +182,7 @@ class AdvancedClientScheduler {
     try {
       console.log(`🏃 Executing workflow: ${workflowId}`)
       
-      // Dynamic import to avoid circular dependencies
+      // Use a static import to avoid HMR issues
       const { executionEngine } = await import('./executionEngine')
       const result = await executionEngine.executeWorkflow(workflowId, workflow.graph)
 
@@ -175,21 +202,59 @@ class AdvancedClientScheduler {
     const wf = this.schedules.get(workflowId)
     if (!wf) {
       console.log(`⚠️ Workflow ${workflowId} not found for unscheduling`)
-      return
+      return false
     }
 
-    wf.isActive = false
-    wf.updatedAt = Date.now()
+    // COMPLETELY REMOVE from all tracking
+    this.schedules.delete(workflowId)
     this.executionLocks.delete(workflowId)
 
     this.saveAll()
-    console.log(`🗑️ Unscheduled ${workflowId}`)
+    console.log(`🗑️ Completely unscheduled and removed ${workflowId}`)
+    
+    this.debugSchedules()
+    return true
   }
 
-  // DEBUG METHOD - Add this to see what's happening
+  // COMPLETELY CLEAR EVERYTHING - Use this to stop all schedules
+  clearAllSchedules() {
+    console.log("🧨 NUKING ALL SCHEDULES AND CLEARING CACHE")
+    
+    // Stop the heartbeat
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+    
+    // Clear all data
+    this.schedules.clear()
+    this.executionLocks.clear()
+    
+    // Clear localStorage
+    localStorage.removeItem("advanced_schedules")
+    
+    console.log("✅ All schedules cleared from memory and localStorage")
+    this.debugSchedules()
+  }
+
+  // Stop scheduling but keep workflows in memory (for saving)
+  stopAllSchedules() {
+    console.log("🛑 Stopping all scheduled workflows")
+    
+    const workflowIds = Array.from(this.schedules.keys())
+    workflowIds.forEach(workflowId => {
+      this.unscheduleWorkflow(workflowId)
+    })
+    
+    console.log("✅ All workflows have been stopped")
+  }
+
+  // DEBUG METHOD
   debugSchedules() {
     console.log("🔍 SCHEDULER DEBUG INFO:")
     console.log("Total schedules:", this.schedules.size)
+    console.log("Execution locks:", this.executionLocks.size)
+    console.log("Heartbeat running:", this.heartbeatTimer !== null)
     
     if (this.schedules.size === 0) {
       console.log("❌ No workflows scheduled!")
@@ -212,19 +277,38 @@ class AdvancedClientScheduler {
     }
   }
 
-  // Add this method to manually trigger the scheduler check
   forceCheck() {
     console.log("🔧 Manually triggering scheduler check")
     this.checkDueWorkflows()
   }
 
+  isWorkflowScheduled(workflowId: string): boolean {
+    return this.schedules.has(workflowId) && this.schedules.get(workflowId)!.isActive
+  }
+
+  getWorkflowStatus(workflowId: string) {
+    const workflow = this.schedules.get(workflowId)
+    if (!workflow) return null
+
+    return {
+      ...workflow,
+      isExecuting: this.executionLocks.get(workflowId) || false,
+      nextExecutionFormatted: new Date(workflow.nextExecution).toISOString(),
+      timeUntilNext: workflow.nextExecution - Date.now()
+    }
+  }
+
+  getScheduledWorkflowIds(): string[] {
+    return Array.from(this.schedules.keys())
+  }
+
   private getIntervalMs(schedule: string) {
     const presets: Record<string, number> = {
-      every_minute: 60 * 1000, // 1 minute
-      every_5_minutes: 5 * 60 * 1000, // 5 minutes
-      every_15_minutes: 15 * 60 * 1000, // 15 minutes
-      hourly: 60 * 60 * 1000, // 1 hour
-      daily: 24 * 60 * 60 * 1000, // 24 hours
+      every_minute: 60 * 1000,
+      every_5_minutes: 5 * 60 * 1000,
+      every_15_minutes: 15 * 60 * 1000,
+      hourly: 60 * 60 * 1000,
+      daily: 24 * 60 * 60 * 1000,
     }
 
     if (presets[schedule]) {
@@ -237,7 +321,7 @@ class AdvancedClientScheduler {
     }
 
     console.warn(`⚠️ Unknown schedule: ${schedule}, defaulting to 1 minute`)
-    return 60 * 1000 // Default to 1 minute
+    return 60 * 1000
   }
 
   private getStoredSchedules(): ScheduledWorkflow[] {
@@ -266,15 +350,17 @@ class AdvancedClientScheduler {
     }
   }
 
-  // Cleanup
+  // Cleanup - call this when your component unmounts
   destroy() {
+    console.log("🧹 Destroying scheduler instance")
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
     this.executionLocks.clear()
-    console.log("🧹 Scheduler destroyed")
+    // Don't clear schedules here, just stop the timer
   }
 }
 
-export const advancedScheduler = new AdvancedClientScheduler()
+// Export singleton instance
+export const advancedScheduler = AdvancedClientScheduler.getInstance()

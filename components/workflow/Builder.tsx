@@ -95,7 +95,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
             config = { source: 'weather', city: 'London', units: 'metric' }
             break
           case 'GitHub':
-            config = { source: 'githubs', repository: 'owner/repo' }
+            config = { source: 'github', repository: 'owner/repo' }
             break
           case 'HTTP Request':
             config = { source: 'http', url: 'https://api.example.com', method: 'GET' }
