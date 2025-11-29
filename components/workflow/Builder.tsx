@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useState, useEffect } from 'react'
+import React, { useCallback, useState, useEffect, useRef } from 'react'
 import ReactFlow, {
   Node as ReactFlowNode,
   Edge as ReactFlowEdge,
@@ -12,6 +12,8 @@ import ReactFlow, {
   Background,
   MiniMap,
   Panel,
+  ReactFlowProvider,
+  useReactFlow,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
@@ -47,7 +49,8 @@ interface WorkflowBuilderProps {
   description?: string
 }
 
-export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, description }: WorkflowBuilderProps) {
+// Inner component that uses React Flow hooks
+function WorkflowBuilderInner({ initialGraph, workflowId, onSave, name, description }: WorkflowBuilderProps) {
   const initialNodes = initialGraph?.nodes.map(toReactFlowNode) || []
   const initialEdges = initialGraph?.edges.map(toReactFlowEdge) || []
 
@@ -56,6 +59,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
   const [selectedNode, setSelectedNode] = useState<ReactFlowNode | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<ReactFlowEdge | null>(null)
   const [isExecuting, setIsExecuting] = useState(false)
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -80,12 +84,13 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
       const label = event.dataTransfer.getData('label')
       const icon = event.dataTransfer.getData('icon')
 
-      if (!type) return
+      if (!type || !reactFlowInstance) return
 
-      const position = {
-        x: event.clientX - 250,
-        y: event.clientY - 100,
-      }
+      const bounds = event.currentTarget.getBoundingClientRect()
+      const position = reactFlowInstance.project({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      })
 
       let config = {}
       
@@ -169,7 +174,7 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
 
       setNodes((nds) => nds.concat(newNode))
     },
-    [setNodes],
+    [reactFlowInstance, setNodes],
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -282,29 +287,16 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
                 <span>Delete {selectedNode ? 'Node' : 'Connection'}</span>
               </button>
             )}
-            
-            {/* <button
-              onClick={handleSave}
-              className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              <span>Save</span>
-            </button> */}
-            
-            {/* <button
-              onClick={handleExecute}
-              disabled={isExecuting || !workflowId}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
-            >
-              <Play className="w-4 h-4" />
-              <span>{isExecuting ? 'Running...' : 'Execute'}</span>
-            </button> */}
           </div>
         </div>
 
         {/* Main Canvas Area */}
-        <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
-            <ReactFlow
+        <div 
+          className="flex-1 relative" 
+          onDrop={onDrop} 
+          onDragOver={onDragOver}
+        >
+          <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -312,10 +304,11 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
+            onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
             className="bg-transparent"
-            >
+          >
             <Controls 
               className="bg-white shadow-lg border border-slate-200 rounded-lg p-1"
               position="top-right"
@@ -370,5 +363,14 @@ export function WorkflowBuilder({ initialGraph, workflowId, onSave, name, descri
         />
       </div>
     </div>
+  )
+}
+
+// Main exported component that wraps with ReactFlowProvider
+export function WorkflowBuilder(props: WorkflowBuilderProps) {
+  return (
+    <ReactFlowProvider>
+      <WorkflowBuilderInner {...props} />
+    </ReactFlowProvider>
   )
 }

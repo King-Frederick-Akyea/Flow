@@ -2,14 +2,13 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Workflow } from '@/types/workflow'
 import { createClient, getCurrentUser } from '@/lib/supabase-server'
+import { Trash2 } from 'lucide-react'
 
 async function getWorkflows(): Promise<Workflow[]> {
   const supabase = await createClient()
   const user = await getCurrentUser()
   
-  if (!user) {
-    return []
-  }
+  if (!user) return []
 
   const { data, error } = await supabase
     .from('workflows')
@@ -25,12 +24,21 @@ async function getWorkflows(): Promise<Workflow[]> {
   return data || []
 }
 
+// 🔥 DELETE SERVER ACTION
+async function deleteWorkflow(id: string) {
+  'use server'
+  const supabase = await createClient()
+  const user = await getCurrentUser()
+
+  if (!user) return
+
+  await supabase.from('workflows').delete().eq('id', id)
+  redirect('/workflows')
+}
+
 export default async function WorkflowsPage() {
   const user = await getCurrentUser()
-  
-  if (!user) {
-    redirect('/')
-  }
+  if (!user) redirect('/')
 
   const workflows = await getWorkflows()
 
@@ -63,37 +71,38 @@ export default async function WorkflowsPage() {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {workflows.map((workflow) => (
-              <Link
+              <div
                 key={workflow.id}
-                href={`/workflows/${workflow.id}`}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                className="relative bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-semibold text-lg text-gray-900">
+                {/* RED DELETE BIN ICON */}
+                <form action={deleteWorkflow.bind(null, workflow.id)}>
+                  <button
+                    type="submit"
+                    className="absolute top-3 right-3 text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </form>
+
+                {/* Clicking the card still opens workflow */}
+                <Link href={`/workflows/${workflow.id}`}>
+                  <h3 className="font-semibold text-lg text-gray-900 mb-3">
                     {workflow.name}
                   </h3>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      workflow.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {workflow.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                
-                {workflow.description && (
-                  <p className="text-gray-600 mb-4 text-sm">
-                    {workflow.description}
-                  </p>
-                )}
-                
-                <div className="text-xs text-gray-500">
-                  {workflow.graph_data?.nodes?.length || 0} nodes • 
-                  Updated {new Date(workflow.updated_at).toLocaleDateString()}
-                </div>
-              </Link>
+
+                  {workflow.description && (
+                    <p className="text-gray-600 mb-4 text-sm">
+                      {workflow.description}
+                    </p>
+                  )}
+
+                  <div className="text-xs text-gray-500">
+                    {workflow.graph_data?.nodes?.length || 0} nodes • Updated{' '}
+                    {new Date(workflow.updated_at).toLocaleDateString()}
+                  </div>
+                </Link>
+              </div>
             ))}
           </div>
         )}

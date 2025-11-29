@@ -1,83 +1,83 @@
+// Sidebar.tsx
 'use client'
 
+
 import React, { JSX } from 'react'
-import { 
-  Clock, 
-  Calendar, 
-  Cloud, 
-  GitBranch, 
-  Table, 
-  Code, 
-  Sliders, 
-  Brain, 
-  Mail, 
-  MessageCircle, 
-  Smartphone, 
-  Share2,
-  Zap,
-  Globe,
-  Workflow,
-  Database
+import {
+Clock,
+Calendar,
+Cloud,
+GitBranch,
+Table,
+Code,
+Sliders,
+Brain,
+Mail,
+MessageCircle,
+Smartphone,
+Share2,
+Zap,
+Globe,
+Workflow,
+Database
 } from 'lucide-react'
 
+
 const nodeGroups = [
-  {
-    title: 'Triggers',
-    icon: <Zap className="w-4 h-4" />,
-    nodes: [
-      { type: 'trigger', label: 'Schedule', icon: 'clock', description: 'Run on a schedule' },
-      { type: 'trigger', label: 'Webhook', icon: 'globe', description: 'On webhook call' },
-      { type: 'trigger', label: 'Manual', icon: 'calendar', description: 'Manual trigger' },
-    ],
-  },
-  {
-    title: 'Data Sources',
-    icon: <Database className="w-4 h-4" />,
-    nodes: [
-      { type: 'dataSource', label: 'Weather', icon: 'cloud', description: 'Get weather data' },
-      { type: 'dataSource', label: 'GitHub', icon: 'git-branch', description: 'GitHub activity' },
-      { type: 'dataSource', label: 'HTTP Request', icon: 'globe', description: 'API data fetch' },
-      { type: 'dataSource', label: 'Database', icon: 'database', description: 'Database query' },
-    ],
-  },
-  {
-    title: 'Logic & Transform',
-    icon: <Code className="w-4 h-4" />,
-    nodes: [
-      { type: 'logic', label: 'Condition', icon: 'code', description: 'If/then logic' },
-      { type: 'transform', label: 'Data Transform', icon: 'sliders', description: 'Transform data' },
-      { type: 'ai', label: 'AI Processing', icon: 'brain', description: 'AI processing' },
-    ],
-  },
-  {
-    title: 'Actions',
-    icon: <Mail className="w-4 h-4" />,
-    nodes: [
-      { type: 'action', label: 'Email', icon: 'mail', description: 'Send email' },
-      { type: 'action', label: 'Slack', icon: 'message-circle', description: 'Slack message' },
-      { type: 'action', label: 'Webhook', icon: 'globe', description: 'Send webhook' },
-      { type: 'action', label: 'SMS', icon: 'smartphone', description: 'Send SMS' },
-      { type: 'action', label: 'Notification', icon: 'share2', description: 'Push notification' },
-    ],
-  },
+{
+title: 'Triggers',
+icon: <Zap className="w-4 h-4" />,
+nodes: [
+{ type: 'trigger', label: 'Schedule', icon: 'clock', description: 'Run on a schedule' },
+{ type: 'trigger', label: 'Webhook', icon: 'globe', description: 'On webhook call' },
+{ type: 'trigger', label: 'Manual', icon: 'calendar', description: 'Manual trigger' },
+],
+},
+{
+title: 'Data Sources',
+icon: <Database className="w-4 h-4" />,
+nodes: [
+{ type: 'dataSource', label: 'Weather', icon: 'cloud', description: 'Get weather data' },
+{ type: 'dataSource', label: 'GitHub', icon: 'git-branch', description: 'GitHub activity' },
+{ type: 'dataSource', label: 'HTTP Request', icon: 'globe', description: 'API data fetch' },
+{ type: 'dataSource', label: 'Database', icon: 'database', description: 'Database query' },
+],
+},
+{
+title: 'Logic & Transform',
+icon: <Code className="w-4 h-4" />,
+nodes: [
+{ type: 'logic', label: 'Condition', icon: 'code', description: 'If/then logic' },
+{ type: 'transform', label: 'Data Transform', icon: 'sliders', description: 'Transform data' },
+{ type: 'ai', label: 'AI Processing', icon: 'brain', description: 'AI processing' },
+],
+},
+{
+title: 'Actions',
+icon: <Mail className="w-4 h-4" />,
+nodes: [
+{ type: 'action', label: 'Email', icon: 'mail', description: 'Send email' },
+{ type: 'action', label: 'Slack', icon: 'message-circle', description: 'Slack message' },
+{ type: 'action', label: 'Webhook', icon: 'globe', description: 'Send webhook' },
+{ type: 'action', label: 'SMS', icon: 'smartphone', description: 'Send SMS' },
+{ type: 'action', label: 'Notification', icon: 'share2', description: 'Push notification' },
+],
+},
 ]
 
+
 const getNodeIcon = (iconName: string) => {
-  const icons: { [key: string]: JSX.Element } = {
-    'clock': <Clock className="w-4 h-4" />,
-    'calendar': <Calendar className="w-4 h-4" />,
-    'cloud': <Cloud className="w-4 h-4" />,
-    'git-branch': <GitBranch className="w-4 h-4" />,
-    'table': <Table className="w-4 h-4" />,
-    'code': <Code className="w-4 h-4" />,
-    'sliders': <Sliders className="w-4 h-4" />,
-    'brain': <Brain className="w-4 h-4" />,
-    'mail': <Mail className="w-4 h-4" />,
-    'message-circle': <MessageCircle className="w-4 h-4" />,
-    'smartphone': <Smartphone className="w-4 h-4" />,
-    'share2': <Share2 className="w-4 h-4" />,
-    'globe': <Globe className="w-4 h-4" />,
-    'database': <Database className="w-4 h-4" />,
+const icons: { [key: string]: JSX.Element } = {
+'clock': <Clock className="w-4 h-4" />,
+'calendar': <Calendar className="w-4 h-4" />,
+'cloud': <Cloud className="w-4 h-4" />,
+'git-branch': <GitBranch className="w-4 h-4" />,
+'table': <Table className="w-4 h-4" />,
+'code': <Code className="w-4 h-4" />,
+'sliders': <Sliders className="w-4 h-4" />,
+'brain': <Brain className="w-4 h-4" />,
+'mail': <Mail className="w-4 h-4" />,
+'message-circle': <MessageCircle className="w-4 h-4" />,
   }
   return icons[iconName] || <Zap className="w-4 h-4" />
 }
