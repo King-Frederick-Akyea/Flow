@@ -205,14 +205,22 @@ class WorkflowExecutionEngine {
   }
 
   private async executeAI(nodeData: any, config: any, context: any): Promise<any> {
-    const inputData = context.current || this.findPreviousData(context)
+    const inputData = context.current || this.findPreviousData(context);
     
     try {
-      const service = getService('ai', 'ai')
-      const result: ServiceResult = await service.execute(config, inputData)
+      const service = getService('ai', 'ai');
+      const result: ServiceResult = await service.execute(config, inputData);
       
       if (!result.success) {
-        throw new Error(result.error || 'AI processing failed')
+        // Return the error in a structured way instead of throwing
+        return {
+          type: 'ai',
+          prompt: config.prompt,
+          input: inputData,
+          error: result.error,
+          success: false,
+          timestamp: new Date().toISOString()
+        };
       }
 
       return {
@@ -220,10 +228,19 @@ class WorkflowExecutionEngine {
         prompt: config.prompt,
         input: inputData,
         result: result.data,
+        success: true,
         timestamp: new Date().toISOString()
-      }
+      };
     } catch (error: any) {
-      throw new Error(`AI processing error: ${error.message}`)
+      // Fallback error handling
+      return {
+        type: 'ai',
+        prompt: config.prompt,
+        input: inputData,
+        error: `AI processing error: ${error.message}`,
+        success: false,
+        timestamp: new Date().toISOString()
+      };
     }
   }
 

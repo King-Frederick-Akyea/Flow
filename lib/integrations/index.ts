@@ -6,6 +6,7 @@ import { slackService } from './slack';
 import { httpService } from './http';
 import { smsService } from './sms';
 import { notificationService } from './notification';
+import { openAIService } from './ai';
 
 export interface ServiceResult {
   success: boolean;
@@ -53,16 +54,7 @@ export const serviceRegistry: ServiceRegistry = {
       } 
     }) 
   },
-  ai: { 
-    execute: async (config: any, context: any) => ({ 
-      success: true, 
-      data: { 
-        prompt: config.prompt, 
-        result: 'AI processed data',
-        input: context.current 
-      } 
-    }) 
-  },
+  ai: openAIService, // Replace the mock with real AI service
   transform: { 
     execute: async (config: any, context: any) => ({ 
       success: true, 

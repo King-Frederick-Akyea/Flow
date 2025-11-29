@@ -1068,7 +1068,6 @@ export function ExecutionPanel({
               >
                 <option value="process">Process Data</option>
                 <option value="summarize">Summarize</option>
-                <option value="classify">Classify</option>
                 <option value="generate">Generate Content</option>
               </select>
             </div>
@@ -1079,31 +1078,63 @@ export function ExecutionPanel({
               </label>
               <textarea
                 className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Process the weather data and create a friendly summary for email..."
+                placeholder="Process the weather data and create a friendly summary for email. You can use {{variable}} syntax to insert data."
                 rows={4}
                 value={localConfig.prompt || ''}
                 onChange={handleInputChange('prompt')}
               />
+              <p className="text-xs text-slate-500 mt-1">
+                Use <code>{'{{variable}}'}</code> to insert data from previous nodes. Example: <code>{'{{temperature}}'}</code> or <code>{'{{data.temperature}}'}</code>
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Model
+                </label>
+                <select 
+                  className="w-full p-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  value={localConfig.model || 'gpt-3.5-turbo'}
+                  onChange={handleInputChange('model')}
+                >
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                  <option value="gpt-4">GPT-4</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Temperature
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  value={localConfig.temperature || 0.7}
+                  onChange={handleInputChange('temperature')}
+                />
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Model (Optional)
+                Max Tokens
               </label>
-              <select 
-                className="w-full p-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                value={localConfig.model || 'gpt-3.5-turbo'}
-                onChange={handleInputChange('model')}
-              >
-                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                <option value="gpt-4">GPT-4</option>
-                <option value="claude-2">Claude 2</option>
-              </select>
+              <input
+                type="number"
+                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                value={localConfig.maxTokens || 500}
+                onChange={handleInputChange('maxTokens')}
+              />
             </div>
 
             <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
               <p className="text-sm text-purple-800">
-                🤖 <strong>AI Processing:</strong> This will process the data from previous nodes using AI.
+                🤖 <strong>AI Processing:</strong> This will process the data from previous nodes using AI. Make sure to set your OpenAI API key in environment variables.
               </p>
             </div>
           </div>
