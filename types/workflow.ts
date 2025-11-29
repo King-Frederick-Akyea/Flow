@@ -41,6 +41,7 @@ export type NodeType =
   | 'logic' 
   | 'transform' 
   | 'action'
+  | 'ai'
 
 export interface WorkflowRun {
   id: string

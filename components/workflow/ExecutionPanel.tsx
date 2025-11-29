@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { Node as ReactFlowNode, Edge as ReactFlowEdge } from 'reactflow'
 import { WorkflowGraph } from '@/types/workflow'
 import { executionEngine } from '@/lib/executionEngine'
-import { Play, Save, Settings, Terminal, ChevronUp, ChevronDown, Trash2, Link } from 'lucide-react'
+import { advancedScheduler } from '@/lib/scheduler' // Adjust path as needed
+import { Play, Save, Settings, Terminal, ChevronUp, ChevronDown, Trash2, Link, Zap } from 'lucide-react'
 
 interface ExecutionPanelProps {
   selectedNode: ReactFlowNode | null
@@ -42,25 +43,66 @@ export function ExecutionPanel({
 
   const handleExecute = async () => {
     if (!workflowId) {
-      setExecutionLog(prev => [...prev, ' Error: Please save the workflow first before executing'])
+      setExecutionLog(prev => [...prev, ' ❌ Error: Please save the workflow first before executing'])
       alert('Please save the workflow first before executing')
       return
     }
 
     setIsExecuting(true)
     setActiveTab('logs')
-    setExecutionLog([' Starting workflow execution...'])
+    setExecutionLog([' 🚀 Starting workflow execution...'])
+
+    try {
+      const graph = getCurrentGraph()
+      
+      // FIRST: Save the workflow (this is important)
+      onSave?.(graph)
+      
+      // SECOND: Find the trigger node to get the schedule
+      const triggerNode = graph.nodes.find(node => node.type === 'trigger')
+      
+      if (triggerNode && triggerNode.data.config?.schedule) {
+        const schedule = triggerNode.data.config.schedule
+        setExecutionLog(prev => [...prev, ` 📅 Scheduling workflow with: ${schedule}`])
+        
+        // Schedule the workflow with the scheduler
+        await advancedScheduler.scheduleWorkflow(workflowId, schedule, graph)
+        
+        setExecutionLog(prev => [...prev, 
+          ' ✅ Workflow scheduled successfully!', 
+          ` 🕒 It will run automatically every ${schedule.replace('_', ' ')}`,
+          ' 💡 Use "Run Once" to test immediately'
+        ])
+      } else {
+        // If no schedule, just run once
+        setExecutionLog(prev => [...prev, ' ⚠️ No schedule found, running once...'])
+        const result = await executionEngine.executeWorkflow(workflowId, graph)
+        setExecutionLog(prev => [...prev, ...result.logs])
+      }
+    } catch (error: any) {
+      setExecutionLog(prev => [...prev, ` ❌ Execution failed: ${error.message}`])
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
+  const handleTriggerNow = async () => {
+    if (!workflowId) {
+      setExecutionLog(prev => [...prev, ' ❌ Error: Please save the workflow first'])
+      alert('Please save the workflow first')
+      return
+    }
+
+    setIsExecuting(true)
+    setActiveTab('logs')
+    setExecutionLog([' 🚀 Manually triggering workflow...'])
 
     try {
       const graph = getCurrentGraph()
       const result = await executionEngine.executeWorkflow(workflowId, graph)
-      
-      setExecutionLog(prev => [
-        ...prev,
-        ...result.logs
-      ])
+      setExecutionLog(prev => [...prev, ...result.logs, ' ✅ Manual execution completed!'])
     } catch (error: any) {
-      setExecutionLog(prev => [...prev, ` Execution failed: ${error.message}`])
+      setExecutionLog(prev => [...prev, ` ❌ Manual execution failed: ${error.message}`])
     } finally {
       setIsExecuting(false)
     }
@@ -69,7 +111,28 @@ export function ExecutionPanel({
   const handleSave = () => {
     const graph = getCurrentGraph()
     onSave?.(graph)
-    setExecutionLog(prev => [...prev, ' Workflow saved successfully'])
+    
+    // Auto-schedule if there's a trigger with schedule
+    if (workflowId) {
+      const triggerNode = graph.nodes.find(node => node.type === 'trigger')
+      if (triggerNode && triggerNode.data.config?.schedule) {
+        const schedule = triggerNode.data.config.schedule
+        setExecutionLog(prev => [...prev, ` ⏰ Auto-scheduling workflow with: ${schedule}`])
+        advancedScheduler.scheduleWorkflow(workflowId, schedule, graph)
+      }
+    }
+    
+    setExecutionLog(prev => [...prev, ' 💾 Workflow saved successfully'])
+  }
+
+  const handleDebugScheduler = () => {
+    setExecutionLog(prev => [...prev, ' 🔍 Checking scheduler status...'])
+    advancedScheduler.debugSchedules()
+  }
+
+  const handleForceCheck = () => {
+    setExecutionLog(prev => [...prev, ' 🔧 Manually triggering scheduler check...'])
+    advancedScheduler.forceCheck()
   }
 
   const handleConfigChange = (field: string, value: any) => {
@@ -147,7 +210,7 @@ export function ExecutionPanel({
     }
 
     return (
-      <div key={selectedNode.id} className="p-6"> {/* Added key here */}
+      <div key={selectedNode.id} className="p-6">
         <div className="flex items-center space-x-3 mb-6">
           <div className="p-2 bg-slate-100 rounded-lg">
             <Settings className="w-5 h-5 text-slate-600" />
@@ -179,11 +242,16 @@ export function ExecutionPanel({
                 onChange={handleInputChange('schedule')}
               >
                 <option value="every_minute">Every Minute</option>
+                <option value="every_5_minutes">Every 5 Minutes</option>
+                <option value="every_15_minutes">Every 15 Minutes</option>
                 <option value="hourly">Hourly</option>
                 <option value="daily">Daily (9 AM)</option>
-                <option value="weekly">Weekly (Monday 9 AM)</option>
-                <option value="monthly">Monthly (1st 9 AM)</option>
               </select>
+            </div>
+            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Schedule Note:</strong> After setting the schedule, click "Save" to enable automatic execution.
+              </p>
             </div>
           </div>
         )
@@ -274,6 +342,18 @@ export function ExecutionPanel({
                     placeholder="recipient@example.com"
                     value={localConfig.to || ''}
                     onChange={handleInputChange('to')}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Subject
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Weather Update"
+                    value={localConfig.subject || ''}
+                    onChange={handleInputChange('subject')}
                   />
                 </div>
               </div>
@@ -476,7 +556,7 @@ export function ExecutionPanel({
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Workflow Controls</h3>
                 <p className="text-sm text-slate-600 mt-1">
-                  {workflowId ? 'Ready to execute your workflow' : 'Save your workflow to start executing'}
+                  {workflowId ? 'Save to schedule or trigger manually' : 'Save your workflow first'}
                 </p>
               </div>
               
@@ -490,41 +570,87 @@ export function ExecutionPanel({
                 </button>
                 
                 <button
+                  onClick={handleTriggerNow}
+                  disabled={isExecuting || !workflowId}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Play className="w-4 h-4" />
+                  <span>{isExecuting ? 'Running...' : 'Run Once'}</span>
+                </button>
+                
+                <button
                   onClick={handleExecute}
                   disabled={isExecuting || !workflowId}
                   className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  <Play className="w-4 h-4" />
-                  <span>{isExecuting ? 'Running...' : 'Execute'}</span>
+                  <Zap className="w-4 h-4" />
+                  <span>{isExecuting ? 'Scheduling...' : 'Schedule'}</span>
                 </button>
               </div>
             </div>
           </div>
           
           <div className="flex-1 p-6">
-            <div className="bg-slate-50 rounded-lg p-4">
-              <h4 className="font-medium text-slate-900 mb-3">Workflow Information</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Status:</span>
-                  <span className="font-medium text-slate-900">
-                    {workflowId ? 'Saved' : 'Unsaved'}
-                  </span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-50 rounded-lg p-4">
+                <h4 className="font-medium text-slate-900 mb-3">Workflow Information</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Status:</span>
+                    <span className="font-medium text-slate-900">
+                      {workflowId ? 'Saved' : 'Unsaved'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Nodes:</span>
+                    <span className="font-medium text-slate-900">
+                      {getCurrentGraph().nodes.length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Connections:</span>
+                    <span className="font-medium text-slate-900">
+                      {getCurrentGraph().edges.length}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Nodes:</span>
-                  <span className="font-medium text-slate-900">
-                    {getCurrentGraph().nodes.length}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Connections:</span>
-                  <span className="font-medium text-slate-900">
-                    {getCurrentGraph().edges.length}
-                  </span>
+              </div>
+              
+              <div className="bg-slate-50 rounded-lg p-4">
+                <h4 className="font-medium text-slate-900 mb-3">Scheduler Controls</h4>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleDebugScheduler}
+                    className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  >
+                    <span>Debug Scheduler</span>
+                  </button>
+                  <button
+                    onClick={handleForceCheck}
+                    className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm"
+                  >
+                    <span>Force Check Now</span>
+                  </button>
                 </div>
               </div>
             </div>
+            
+            {/* Show current schedule info */}
+            {workflowId && (
+              <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 className="font-medium text-blue-900 mb-2">Schedule Info</h4>
+                <div className="text-sm text-blue-800 space-y-1">
+                  <p><strong>Workflow ID:</strong> {workflowId}</p>
+                  <p><strong>Instructions:</strong></p>
+                  <ul className="list-disc list-inside ml-2">
+                    <li>Set schedule in trigger node configuration</li>
+                    <li>Click "Save" to auto-schedule</li>
+                    <li>Use "Run Once" to test immediately</li>
+                    <li>Use "Schedule" to enable automatic execution</li>
+                  </ul>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

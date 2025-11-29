@@ -2,262 +2,278 @@
 
 interface ScheduledWorkflow {
   workflowId: string
-  executeCallback: () => Promise<void>
-  interval: NodeJS.Timeout
-  nextExecution: Date
   schedule: string
-  graph: any // Workflow graph data
+  graph: any
+  lastExecution: number
+  nextExecution: number
   isActive: boolean
   executionCount: number
-  createdAt: Date
-  updatedAt: Date
+  createdAt: number
+  updatedAt: number
 }
 
 class AdvancedClientScheduler {
   private schedules: Map<string, ScheduledWorkflow> = new Map()
-  private isInitialized: boolean = false
+  private heartbeatTimer: NodeJS.Timeout | null = null
+  private isInitialized = false
+  private executionLocks: Map<string, boolean> = new Map()
 
-  // Initialize scheduler and restore from localStorage
-  initialize() {
-    if (this.isInitialized) return
-    
-    console.log('🔄 Initializing advanced client scheduler...')
-    this.isInitialized = true
-    
-    const storedSchedules = this.getStoredSchedules()
-    
-    storedSchedules.forEach(schedule => {
-      if (schedule.isActive) {
-        this.restoreSchedule(schedule)
-      }
-    })
-    
-    console.log(`✅ Advanced scheduler initialized with ${storedSchedules.length} schedules`)
+  constructor() {
+    if (typeof window !== "undefined") {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        this.initialize()
+      })
+    }
   }
 
-  async scheduleWorkflow(workflowId: string, schedule: string, graph: any): Promise<ScheduledWorkflow> {
-    // Clear existing schedule first
-    this.unscheduleWorkflow(workflowId)
+  initialize() {
+    if (this.isInitialized) return
+    this.isInitialized = true
 
-    console.log(`📅 Advanced scheduling workflow ${workflowId} with schedule: ${schedule}`)
+    console.log("🔄 Scheduler initializing…")
 
-    const executeCallback = this.createExecuteCallback(workflowId, graph)
+    const stored = this.getStoredSchedules()
+    console.log("📦 Found stored schedules:", stored.length)
+
+    stored.forEach(s => {
+      if (s.isActive) {
+        // Ensure nextExecution is in the future
+        if (s.nextExecution <= Date.now()) {
+          const intervalMs = this.getIntervalMs(s.schedule)
+          s.nextExecution = Date.now() + intervalMs
+          console.log(`🕒 Reset next execution for ${s.workflowId} to ${new Date(s.nextExecution).toISOString()}`)
+        }
+        this.schedules.set(s.workflowId, s)
+        console.log(`✅ Loaded workflow: ${s.workflowId} (active)`)
+      } else {
+        console.log(`❌ Skipped workflow: ${s.workflowId} (inactive)`)
+      }
+    })
+
+    this.startHeartbeat()
+    console.log("✅ Scheduler ready with", this.schedules.size, "active workflows")
+    
+    // Debug output
+    this.debugSchedules()
+  }
+
+  private startHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+
+    this.heartbeatTimer = setInterval(() => {
+      this.checkDueWorkflows()
+    }, 2000) // Check every 2 seconds
+
+    console.log("❤️ Heartbeat started")
+  }
+
+  private async checkDueWorkflows() {
+    const now = Date.now()
+    let dueCount = 0
+
+    for (const [id, workflow] of this.schedules) {
+      if (!workflow.isActive) continue
+      
+      // Skip if currently executing
+      if (this.executionLocks.get(id)) {
+        continue
+      }
+
+      if (now >= workflow.nextExecution) {
+        dueCount++
+        console.log(`⚡ Workflow ${id} is DUE! Running now...`)
+        console.log(`   Scheduled: ${new Date(workflow.nextExecution).toISOString()}`)
+        console.log(`   Current: ${new Date(now).toISOString()}`)
+        
+        this.executionLocks.set(id, true)
+        
+        try {
+          await this.runWorkflow(id)
+          
+          // Calculate next execution - FIXED: Use the original nextExecution as base
+          const intervalMs = this.getIntervalMs(workflow.schedule)
+          const newNextExecution = workflow.nextExecution + intervalMs
+          
+          workflow.nextExecution = newNextExecution
+          workflow.updatedAt = Date.now()
+          
+          console.log(`✅ Workflow ${id} completed. Next run: ${new Date(workflow.nextExecution).toISOString()}`)
+          
+          this.saveAll()
+        } catch (error) {
+          console.error(`❌ Workflow ${id} failed:`, error)
+          // On error, still schedule next execution but use current time as base
+          const intervalMs = this.getIntervalMs(workflow.schedule)
+          workflow.nextExecution = Date.now() + intervalMs
+          this.saveAll()
+        } finally {
+          this.executionLocks.set(id, false)
+        }
+      }
+    }
+    
+    if (dueCount > 0) {
+      console.log(`🎯 Processed ${dueCount} due workflows`)
+    }
+  }
+
+  async scheduleWorkflow(workflowId: string, schedule: string, graph: any) {
+    console.log(`📅 Scheduling workflow: ${workflowId} with schedule: ${schedule}`)
+    
     const intervalMs = this.getIntervalMs(schedule)
-    const nextExecution = this.calculateNextExecution(schedule)
+    const now = Date.now()
 
-    const scheduledWorkflow: ScheduledWorkflow = {
+    const wf: ScheduledWorkflow = {
       workflowId,
-      executeCallback,
-      interval: this.createInterval(workflowId, executeCallback, intervalMs),
-      nextExecution,
       schedule,
       graph,
+      lastExecution: 0,
+      nextExecution: now + intervalMs,
       isActive: true,
       executionCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: now,
+      updatedAt: now
     }
 
-    this.schedules.set(workflowId, scheduledWorkflow)
-    this.saveToStorage(scheduledWorkflow)
+    this.schedules.set(workflowId, wf)
+    this.saveAll()
 
-    console.log(`✅ Successfully scheduled workflow ${workflowId}, next execution: ${nextExecution.toLocaleString()}`)
-    return scheduledWorkflow
+    console.log(`✅ Scheduled workflow ${workflowId}`)
+    console.log(`   First run: ${new Date(wf.nextExecution).toISOString()}`)
+    console.log(`   Interval: ${schedule} (${intervalMs}ms)`)
+    
+    this.debugSchedules()
+  }
+
+  private async runWorkflow(workflowId: string) {
+    const workflow = this.schedules.get(workflowId)
+    if (!workflow) {
+      throw new Error(`Workflow ${workflowId} not found in scheduler`)
+    }
+
+    try {
+      console.log(`🏃 Executing workflow: ${workflowId}`)
+      
+      // Dynamic import to avoid circular dependencies
+      const { executionEngine } = await import('./executionEngine')
+      const result = await executionEngine.executeWorkflow(workflowId, workflow.graph)
+
+      workflow.lastExecution = Date.now()
+      workflow.executionCount++
+      workflow.updatedAt = Date.now()
+
+      console.log(`✅ Successfully executed workflow ${workflowId} (run #${workflow.executionCount})`)
+      return result
+    } catch (error) {
+      console.error(`❌ Workflow execution failed:`, error)
+      throw error
+    }
   }
 
   unscheduleWorkflow(workflowId: string) {
-    const existing = this.schedules.get(workflowId)
-    if (existing) {
-      clearInterval(existing.interval)
-      this.schedules.delete(workflowId)
+    const wf = this.schedules.get(workflowId)
+    if (!wf) {
+      console.log(`⚠️ Workflow ${workflowId} not found for unscheduling`)
+      return
+    }
+
+    wf.isActive = false
+    wf.updatedAt = Date.now()
+    this.executionLocks.delete(workflowId)
+
+    this.saveAll()
+    console.log(`🗑️ Unscheduled ${workflowId}`)
+  }
+
+  // DEBUG METHOD - Add this to see what's happening
+  debugSchedules() {
+    console.log("🔍 SCHEDULER DEBUG INFO:")
+    console.log("Total schedules:", this.schedules.size)
+    
+    if (this.schedules.size === 0) {
+      console.log("❌ No workflows scheduled!")
+      return
+    }
+    
+    for (const [id, workflow] of this.schedules) {
+      const status = workflow.isActive ? 'ACTIVE' : 'INACTIVE'
+      const nextRun = new Date(workflow.nextExecution).toISOString()
+      const lastRun = workflow.lastExecution ? new Date(workflow.lastExecution).toISOString() : 'Never'
+      const timeUntilNext = workflow.nextExecution - Date.now()
       
-      // Mark as inactive in storage instead of deleting
-      this.markInactiveInStorage(workflowId)
-      
-      console.log(`🗑️ Unscheduled workflow: ${workflowId}`)
+      console.log(`📋 ${id}:`)
+      console.log(`   Status: ${status}`)
+      console.log(`   Schedule: ${workflow.schedule}`)
+      console.log(`   Next Run: ${nextRun} (in ${Math.round(timeUntilNext/1000)}s)`)
+      console.log(`   Last Run: ${lastRun}`)
+      console.log(`   Execution Count: ${workflow.executionCount}`)
+      console.log(`   Is Locked: ${this.executionLocks.get(id) || false}`)
     }
   }
 
-  // Execute workflow immediately
-  async triggerWorkflowNow(workflowId: string): Promise<boolean> {
-    const scheduled = this.schedules.get(workflowId)
-    if (!scheduled) {
-      console.warn(`⚠️ Workflow ${workflowId} not found for immediate execution`)
-      return false
+  // Add this method to manually trigger the scheduler check
+  forceCheck() {
+    console.log("🔧 Manually triggering scheduler check")
+    this.checkDueWorkflows()
+  }
+
+  private getIntervalMs(schedule: string) {
+    const presets: Record<string, number> = {
+      every_minute: 60 * 1000, // 1 minute
+      every_5_minutes: 5 * 60 * 1000, // 5 minutes
+      every_15_minutes: 15 * 60 * 1000, // 15 minutes
+      hourly: 60 * 60 * 1000, // 1 hour
+      daily: 24 * 60 * 60 * 1000, // 24 hours
     }
 
-    try {
-      console.log(`⚡ Immediately executing workflow: ${workflowId}`)
-      await scheduled.executeCallback()
-      return true
-    } catch (error) {
-      console.error(`❌ Error executing workflow ${workflowId}:`, error)
-      return false
-    }
-  }
-
-  getScheduledWorkflows(): ScheduledWorkflow[] {
-    return Array.from(this.schedules.values()).filter(sw => sw.isActive)
-  }
-
-  getNextExecution(workflowId: string): Date | null {
-    const scheduled = this.schedules.get(workflowId)
-    return scheduled ? scheduled.nextExecution : null
-  }
-
-  // Get workflow status
-  getWorkflowStatus(workflowId: string) {
-    const scheduled = this.schedules.get(workflowId)
-    if (!scheduled) return 'not_scheduled'
-    
-    return scheduled.isActive ? 'active' : 'inactive'
-  }
-
-  // Update workflow schedule
-  async updateSchedule(workflowId: string, newSchedule: string) {
-    const existing = this.schedules.get(workflowId)
-    if (!existing) {
-      throw new Error(`Workflow ${workflowId} not found`)
+    if (presets[schedule]) {
+      return presets[schedule]
     }
 
-    console.log(`🔄 Updating schedule for workflow ${workflowId}: ${existing.schedule} → ${newSchedule}`)
-    
-    return await this.scheduleWorkflow(workflowId, newSchedule, existing.graph)
-  }
-
-  // Clean up all schedules
-  destroy() {
-    console.log('🧹 Cleaning up advanced scheduler...')
-    
-    for (const [workflowId, scheduled] of this.schedules) {
-      clearInterval(scheduled.interval)
+    const match = schedule.match(/every_(\d+)_minutes/)
+    if (match) {
+      return parseInt(match[1]) * 60 * 1000
     }
-    
-    this.schedules.clear()
-    this.isInitialized = false
+
+    console.warn(`⚠️ Unknown schedule: ${schedule}, defaulting to 1 minute`)
+    return 60 * 1000 // Default to 1 minute
   }
 
-  // Private methods
-  private createExecuteCallback(workflowId: string, graph: any): () => Promise<void> {
-    return async () => {
-      const executionTime = new Date().toLocaleString()
-      console.log(`🕒 Executing scheduled workflow: ${workflowId} at ${executionTime}`)
-      
-      try {
-        // Dynamic import to avoid circular dependencies
-        const { executionEngine } = await import('./executionEngine')
-        await executionEngine.executeWorkflow(workflowId, graph)
-        
-        // Update execution count
-        const scheduled = this.schedules.get(workflowId)
-        if (scheduled) {
-          scheduled.executionCount++
-          scheduled.updatedAt = new Date()
-          this.saveToStorage(scheduled)
-        }
-        
-        console.log(`✅ Successfully executed workflow ${workflowId}`)
-      } catch (error) {
-        console.error(`❌ Error in scheduled execution of ${workflowId}:`, error)
-      }
-    }
-  }
-
-  private createInterval(workflowId: string, executeCallback: () => Promise<void>, intervalMs: number): NodeJS.Timeout {
-    return setInterval(executeCallback, intervalMs)
-  }
-
-  private getIntervalMs(schedule: string): number {
-    switch (schedule) {
-      case 'every_minute':
-        return 60000
-      case 'every_5_minutes':
-        return 300000
-      case 'every_15_minutes':
-        return 900000
-      case 'hourly':
-        return 3600000
-      case 'daily':
-        return 86400000
-      case 'weekly':
-        return 604800000
-      case 'monthly':
-        return 2629746000 // Approx 1 month
-      default:
-        const minutesMatch = schedule.match(/every_(\d+)_minutes/)
-        if (minutesMatch) {
-          return parseInt(minutesMatch[1]) * 60000
-        }
-        return 60000 
-    }
-  }
-
-  private calculateNextExecution(schedule: string): Date {
-    const now = new Date()
-    const intervalMs = this.getIntervalMs(schedule)
-    return new Date(now.getTime() + intervalMs)
-  }
-
-  // Storage methods
   private getStoredSchedules(): ScheduledWorkflow[] {
-    if (typeof window === 'undefined') return []
-    
     try {
-      const stored = localStorage.getItem('advanced_workflow_schedules')
-      if (!stored) return []
-      
-      const parsed = JSON.parse(stored)
-      
-      // Convert string dates back to Date objects
-      return parsed.map((item: any) => ({
-        ...item,
-        nextExecution: new Date(item.nextExecution),
-        createdAt: new Date(item.createdAt),
-        updatedAt: new Date(item.updatedAt)
-      }))
-    } catch {
+      const raw = localStorage.getItem("advanced_schedules")
+      if (!raw) {
+        console.log("💾 No stored schedules found in localStorage")
+        return []
+      }
+      const schedules = JSON.parse(raw)
+      console.log(`💾 Loaded ${schedules.length} schedules from localStorage`)
+      return schedules
+    } catch (error) {
+      console.error("❌ Failed to load schedules from localStorage:", error)
       return []
     }
   }
 
-  private saveToStorage(scheduledWorkflow: ScheduledWorkflow) {
-    if (typeof window === 'undefined') return
-    
-    const allSchedules = this.getStoredSchedules()
-    const existingIndex = allSchedules.findIndex(s => s.workflowId === scheduledWorkflow.workflowId)
-    
-    if (existingIndex >= 0) {
-      allSchedules[existingIndex] = scheduledWorkflow
-    } else {
-      allSchedules.push(scheduledWorkflow)
-    }
-    
-    localStorage.setItem('advanced_workflow_schedules', JSON.stringify(allSchedules))
-  }
-
-  private markInactiveInStorage(workflowId: string) {
-    const allSchedules = this.getStoredSchedules()
-    const scheduleIndex = allSchedules.findIndex(s => s.workflowId === workflowId)
-    
-    if (scheduleIndex >= 0) {
-      allSchedules[scheduleIndex].isActive = false
-      allSchedules[scheduleIndex].updatedAt = new Date()
-      localStorage.setItem('advanced_workflow_schedules', JSON.stringify(allSchedules))
+  private saveAll() {
+    try {
+      const schedules = [...this.schedules.values()]
+      localStorage.setItem("advanced_schedules", JSON.stringify(schedules))
+      console.log(`💾 Saved ${schedules.length} schedules to localStorage`)
+    } catch (error) {
+      console.error("❌ Failed to save schedules:", error)
     }
   }
 
-  private restoreSchedule(storedSchedule: ScheduledWorkflow) {
-    const executeCallback = this.createExecuteCallback(storedSchedule.workflowId, storedSchedule.graph)
-    const intervalMs = this.getIntervalMs(storedSchedule.schedule)
-    
-    const scheduledWorkflow: ScheduledWorkflow = {
-      ...storedSchedule,
-      executeCallback,
-      interval: this.createInterval(storedSchedule.workflowId, executeCallback, intervalMs),
-      nextExecution: this.calculateNextExecution(storedSchedule.schedule)
+  // Cleanup
+  destroy() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
     }
-
-    this.schedules.set(storedSchedule.workflowId, scheduledWorkflow)
+    this.executionLocks.clear()
+    console.log("🧹 Scheduler destroyed")
   }
 }
 
