@@ -23,23 +23,31 @@ class WorkflowExecutionEngine {
       logs.push(`📍 Starting from: ${startNode.data.label}`)
 
       // Execute nodes in sequence following the connections
-      let currentNode: WorkflowNode | undefined = startNode
+      let currentNodeQueue: WorkflowNode[] = [startNode]
       const executedNodes = new Set<string>()
       
-      while (currentNode && !executedNodes.has(currentNode.id)) {
+      while (currentNodeQueue.length > 0) {
+        // Remove the next node from the queue
+        const currentNode = currentNodeQueue.shift()
+        if (!currentNode || executedNodes.has(currentNode.id)) continue
         executedNodes.add(currentNode.id)
         
         logs.push(`⚡ Executing: ${currentNode.data.label} (${currentNode.type})`)
-        
+
         const result = await this.executeNode(currentNode, context)
         context[currentNode.id] = result
         context['current'] = result
-        
         logs.push(`✅ ${currentNode.data.label} completed`)
         
-        // Find the next node by following edges
-        const nextEdge = graph.edges.find(e => e.source === currentNode!.id)
-        currentNode = nextEdge ? graph.nodes.find(n => n.id === nextEdge.target) : undefined
+        // Find ALL outgoing edges from this node
+        const outgoingEdges = graph.edges.filter(e => e.source === currentNode.id)
+        // For each outgoing node, add to the queue if it hasn't been executed
+        for (const edge of outgoingEdges) {
+          const nextNode = graph.nodes.find(n => n.id === edge.target)
+          if (nextNode && !executedNodes.has(nextNode.id)) {
+            currentNodeQueue.push(nextNode)
+          }
+        }
       }
 
       logs.push('🎉 Workflow completed successfully!')
